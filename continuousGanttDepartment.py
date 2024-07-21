@@ -25,7 +25,6 @@ import pandas as pd
 import plotly.express as pex
 import matplotlib.pyplot as plt
 from tkinter.filedialog import askopenfilename
-from openpyxl import load_workbook
 import sys
 import kaleido
 from datetime import datetime
@@ -37,19 +36,9 @@ import re
 #import plotly.graph_objects as go
 filename = askopenfilename(title="Select project sheet")
 
-
-wb = load_workbook(filename)
-ws = wb.active # or wb["SheetName"] # <- change the name here
-
-rows = [[c.value for c in r] for r in ws.iter_rows()
-         if not ws.row_dimensions[r[0].row].hidden]
-
-projects_df = pd.DataFrame(data= rows[1:], columns=rows[0], dtype=str)
-projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("float")
-projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("Int64")
 #filename = "FY24 Projects DRAFT-v2.xlsx"
 
-#projects_df = pd.read_excel(filename, engine="openpyxl", dtype={'start_date': 'str', 'end_date': 'str', 'level_of_effort': 'Int64'})
+projects_df = pd.read_excel(filename, engine="openpyxl", dtype={'start_date': 'str', 'end_date': 'str', 'level_of_effort': 'Int64'})
 
 
 projects_df = projects_df[['task', 'level_of_effort', 'start_date', 'end_date']].copy()
@@ -59,9 +48,6 @@ pd.set_option('display.max_columns', None)
 pd.options.display.max_colwidth = 200
 print(projects_df)
 
-projects_df = projects_df.dropna()
-projects_df['start_date'] = projects_df['start_date'].apply(lambda x: x.replace(" 00:00:00", ""))
-projects_df['end_date'] = projects_df['end_date'].apply(lambda x: x.replace(" 00:00:00", ""))
 
 
 # projects_df['start_date'] = projects_df['start_date'].apply(lambda x: re.sub(r'(\d{4}-\d{2}-\d{2}).*$', r'\1', x))
@@ -181,7 +167,7 @@ new_max_height_plus_level_of_effort = int(new_max_height_df['level_of_effort'].m
 df = projects_df.copy()
 
 fig, gnt = plt.subplots(figsize=(16, 10))
-array = np.linspace(0, 1, len(df))
+array = np.linspace(0, 1, len(df['Lead'].unique()))
 np.random.shuffle(array)
 color = iter(cm.rainbow(array))
 #
