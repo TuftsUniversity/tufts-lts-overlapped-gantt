@@ -36,9 +36,9 @@ A use of this would then be to go back to your input spreadsheet and adjust date
 **animate.py**
 The code works by creating essentially boolean values in a master sheet that represents the total possible area a result continuous Gannt chart 
 could occupy, that is a run of the earliest start date to the latest end date, and a rise of the all the level of effort values added together, as if 
-all of the projects had to be done at the same time.  (columns and rows (indices ) are reversed in this actual processing, but the effect is the same
+all of the projects had to be done at the same time.  Columns and rows (indices ) are reversed in this actual processing, but the effect is the same
 
-Then it loops through each of the projects, with its own start and end date, and level of effort, which defines a sub datafrsame that has to "git" somehwere in the 
+Then it loops through each of the projects, with its own start and end date, and level of effort, which defines a sub dataframe that has to "fit" somwhere in the 
 larger dataframe.   Start and end dates are fixed, at least in the operation of the script, but where on the y axis the project block will be located
 will depend on there not being other projects that intersect with that, assuming you can't do two things at the same time on the same day.
 
@@ -50,5 +50,6 @@ The generalizations you create with this tool probably won't represent exactly h
 but is meant to help you plan out projects that you have to complete in a certain time period, e.g. fiscal year.   It helps the author, e.g. 
 realize that I may "frontload" projects too readily and have to spread them out where there are breaks in the Gannt "curve" to create a smoother application of effort.
 
+Thus you may modify the start and end dates of projects depending on what you find when you plot them, possibly still having the same area (l x w) but over a longer period of starting and end at a different time.
 
 ![Project Template Plot](https://www.library.tufts.edu/reserves_workflows/Project_Template_Plot.png)
