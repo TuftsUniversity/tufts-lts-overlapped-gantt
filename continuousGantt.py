@@ -1,25 +1,5 @@
+#!/usr/bin/env python3
 # import pandas as pd
-# import plotly.express as pex
-#
-# d1 = dict(stack=1, start='2023-09-01', finish='2023-10-01', task='Sleep')
-# d2 = dict(stack=1, start='2023-10-01', finish='2021-10-15', task='EAT')
-# d3 = dict(stack=1, start='2023-09-15', finish='2023-09-30', task='Study')
-# d4 = dict(stack=1, start='2023-10-10', finish='2023-10-30', task='Work')
-# d5 = dict(stack=1, start='2023-10-15', finish='2023-10-30', task='EAT')
-# d6 = dict(stack=1, start='2023-10-15', finish='2023-11-01', task='Study')
-# d8 = dict(stack=1, start='2023-11-02', finish='2023-11-15', task='EAT')
-# d7 = dict(stack=1, start='2023-11-02', finish='2023-11-15', task='Sleep')
-#
-# dict_list = [d1,d2,d3,d4,d5,d6,d7,d8]
-# for dict in dict_list:
-#
-#
-#
-# df = pd.DataFrame([d1,d2,d3,d4,d5,d6,d7,d8])
-#
-# gantt = pex.timeline(df, x_start='start', x_end='finish', y='stack', color='task', height=300)
-# gantt
-
 
 import pandas as pd
 import plotly.express as pex
@@ -47,9 +27,6 @@ rows = [[c.value for c in r] for r in ws.iter_rows()
 projects_df = pd.DataFrame(data= rows[1:], columns=rows[0], dtype=str)
 projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("float")
 projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("Int64")
-#filename = "FY24 Projects DRAFT-v2.xlsx"
-
-#projects_df = pd.read_excel(filename, engine="openpyxl", dtype={'start_date': 'str', 'end_date': 'str', 'level_of_effort': 'Int64'})
 
 
 projects_df = projects_df[['task', 'level_of_effort', 'start_date', 'end_date']].copy()
@@ -63,9 +40,6 @@ projects_df = projects_df.dropna()
 projects_df['start_date'] = projects_df['start_date'].apply(lambda x: x.replace(" 00:00:00", ""))
 projects_df['end_date'] = projects_df['end_date'].apply(lambda x: x.replace(" 00:00:00", ""))
 
-
-# projects_df['start_date'] = projects_df['start_date'].apply(lambda x: re.sub(r'(\d{4}-\d{2}-\d{2}).*$', r'\1', x))
-# projects_df['end_date'] = projects_df['end_date'].apply(lambda x: re.sub(r'(\d{4}-\d{2}-\d{2}).*$', r'\1', x))
 
 
 
@@ -91,70 +65,43 @@ range_list = list(reversed(list(range(0, height_of_matrix))))
 for z in range(0, len(range_list)):
 
     range_list[z] = str(range_list[z])
-    # print (range_list[z])
-    # print(type(range_list[z]))
-
-
 
 master_plotting_df = pd.DataFrame(columns=date_range, index=range_list)
 
 master_plotting_df = master_plotting_df.applymap(lambda x: 0)
 
 
-# print(master_plotting_df)
 
-# sys.exit()
 project_plotting_df = master_plotting_df.copy()
 project_plotting_df = master_plotting_df.copy()
 for x in range(0, len(projects_df)):
-    # if x == 4:
-    #     break
 
-
-
-    # print(project_plotting_df)
-
-
-    #print(str(x) + " time through")
     y = 0
     while y + int(projects_df.iloc[x, projects_df.columns.get_loc('level_of_effort')]) < height_of_matrix:
-        #print(str(y + int(projects_df.loc[x, 'level_of_effort']) - 1))
 
-        #try:
+        # create a block the height and width of the project level of effort and the start and end dates
+        # the start and end dates are fixed, but where a project of this level of effort fits on the y axis will depend where it "nests"
+        # among other projects
         project_dates_and_effort_df = project_plotting_df.loc[str(y + int(projects_df.iloc[x, projects_df.columns.get_loc('level_of_effort')]) - 1): str(y), projects_df.iloc[x, projects_df.columns.get_loc('start_date')]: projects_df.iloc[x, projects_df.columns.get_loc('end_date')]]
 
-        #except:
-        #    break
+
         master_plotting_subslice_df = master_plotting_df.copy()
 
-        #master_plotting_subslice_df = master_plotting_df.loc[str(y + int(projects_df.iloc[x, projects_df.columns.get_loc('level_of_effort')]) - 1): str(y), projects_df.loc[x, 'start_date']: projects_df.loc[x, 'end_date']].loc[str(y + int(projects_df.iloc[x, projects_df.columns.get_loc('level_of_effort')]) - 1): str(y), projects_df.loc[x, 'start_date']: projects_df.loc[x, 'end_date']]
 
+        #this part of the code blocks out parts of the master dataframe if the rectangle of the x run of date range (fixed) fits into a block with the height of level of effort if
+        # this starts at a given y value.     if not y is incremented and the next one up is tried
 
-
-
-
-        # print(project_dates_and_effort_df.equals(master_plotting_subslice_df))
-        # sys.exit()
-
-
-
+        # the master plotting df has a value of 0 in its initial state in this sector if no part of it has been occupied by other sectors
+        # this the DataFrame equality check will confirm that for equal rows and columns they will all have the same value for each cell "0"
+        # but if other projects have occupied part of this sector some of the them will have a value of 1 and therefore the equality operator will
+        # not return that they are equivalent, dnd y will be incrermented 1 and this will be tried again
         if (project_dates_and_effort_df.equals(master_plotting_df.loc[str(y + int(projects_df.iloc[x, projects_df.columns.get_loc('level_of_effort')]) - 1): str(y), projects_df.iloc[x, projects_df.columns.get_loc('start_date')]: projects_df.iloc[x, projects_df.columns.get_loc('end_date')]])):
             projects_df.iloc[x, projects_df.columns.get_loc('stack')] = y
-            #print("got in")
+
             master_plotting_df.loc[str(y + int(projects_df.iloc[x, projects_df.columns.get_loc('level_of_effort')]) - 1): str(y), projects_df.iloc[x, projects_df.columns.get_loc('start_date')]: projects_df.iloc[x, projects_df.columns.get_loc('end_date')]] =  master_plotting_df.loc[str(y + int(projects_df.iloc[x, projects_df.columns.get_loc('level_of_effort')]) - 1): str(y), projects_df.iloc[x, projects_df.columns.get_loc('start_date')]: projects_df.iloc[x, projects_df.columns.get_loc('end_date')]].applymap(lambda z: 1)
 
 
 
-            # if x == 1:
-
-            #     print(master_plotting_df.loc[str(y + int(projects_df.iloc[x, projects_df.columns.get_loc('level_of_effort')]) - 1): str(y), projects_df.iloc[x, projects_df.columns.get_loc('start_date')]: projects_df.iloc[x, projects_df.columns.get_loc('end_date')]])
-            #     print(project_dates_and_effort_df)
-            #     sys.exit()
-            #print(master_plotting_df.loc[str(y + int(projects_df.iloc[x, projects_df.columns.get_loc('level_of_effort')]) - 1): str(y), projects_df.loc[x, 'start_date']: projects_df.loc[x, 'end_date']])
-
-
-
-            #master_plotting_df.to_excel("Plotting Dataframe for Testing - " +str(x) + ".xlsx")
             y += 1
             break
 
@@ -188,6 +135,8 @@ color = iter(cm.rainbow(array))
 # Plotting the area chart
 # palette = cycle(pex.colors.qualitative.Bold)
 # plt.style.use('ggplot')
+
+df = df.reset_index()
 for l in range(0, len(df)):
     #print(df.loc[l, 'start'])
     #print(df.loc[l, 'finish'])
