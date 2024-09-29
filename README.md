@@ -49,3 +49,6 @@ Animate.py shows how this happens, and where the blocks are moved in the course 
 The generalizations you create with this tool probably won't represent exactly how much effort (hours) you will spend on each project in a given time period,
 but is meant to help you plan out projects that you have to complete in a certain time period, e.g. fiscal year.   It helps the author, e.g. 
 realize that I may "frontload" projects too readily and have to spread them out where there are breaks in the Gannt "curve" to create a smoother application of effort.
+
+
+![Project Template Plot](https://www.library.tufts.edu/reserves_workflows/Project Template Plot.png)
