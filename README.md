@@ -19,7 +19,7 @@ To accomplish this, the input sheet should have projects described by the follow
   - level of effort at a given time, roughly corresponding to hours per day
   - this is an estimate and average
 
-**Metho:**
+**Method:**
 
 To use this script first install the requirements using the following line
 
