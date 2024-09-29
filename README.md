@@ -51,4 +51,4 @@ but is meant to help you plan out projects that you have to complete in a certai
 realize that I may "frontload" projects too readily and have to spread them out where there are breaks in the Gannt "curve" to create a smoother application of effort.
 
 
-![Project Template Plot](https://www.library.tufts.edu/reserves_workflows/Project Template Plot.png)
+![Project Template Plot](https://www.library.tufts.edu/reserves_workflows/Project_Template_Plot.png)
