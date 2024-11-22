@@ -1,0 +1,8 @@
+Take this Python flask application and add a login route.   The login should be a stored username and password that the user has to know, i.e. they can't create a user.
+
+THe username and password are as follows: 
+
+username: lts1
+password: !OCewif*=Ra7
+
+this login should pop up before the user can access the main page of the app, and should prevevnt access to the main template if the correct username and password is not presented, with a suitable error page
