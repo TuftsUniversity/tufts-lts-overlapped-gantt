@@ -29,8 +29,9 @@ def generate_gantt_chart(jira_json):
     # projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("float")
     # projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("Int64")
 
-    projects_df["level_of_effort"] = 2
-
+    if projects_df['level_of_effort'].isnull().all():
+      projects_df["level_of_effort"] = 2
+    projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("Int64")
     projects_df["stack"] = 0
     # print(projects_df)
     projects_df = projects_df.sort_values(["Start date", "Due date", "level_of_effort"])
@@ -63,7 +64,8 @@ def generate_gantt_chart(jira_json):
 
     delta = int(delta.total_seconds() / 60 / 60 / 24)
     height_of_matrix = int(projects_df["level_of_effort"].sum())
-
+    if height_of_matrix < 7:
+        height_of_matrix = 7
     rows, cols = (delta, height_of_matrix)
     arr = [[0] * cols] * rows
 
@@ -207,9 +209,9 @@ def generate_gantt_chart(jira_json):
 
     fig.tight_layout()
     gnt.set_xlabel("Date")
-    gnt.set_ylabel("Effort Level")
+    gnt.set_ylabel("Rough Average Hours per Day\nEffort Level: Low=2, Medium=4, High= 6, Average for Project.  Most projects of any length are Low=2")
 
-    fig.legend(loc="upper left")
+    #fig.legend(loc="upper left")
 
     # top_value_benchmark = 0.710 / 10
     # top_value = top_value_benchmark * new_max_height_plus_level_of_effort

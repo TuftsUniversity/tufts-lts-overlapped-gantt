@@ -50,11 +50,27 @@ def fetch_API(label, assignee):
         for issue in issues:
             
             title = issue["fields"]["summary"]
-            level_of_effort = (
-                issue["fields"].get("customfield_10192", {}).get("value", None)
-            )
-
             
+            try:
+                level_of_effort = (
+                    issue["fields"].get("customfield_10338", {}).get("value", None)
+                )
+
+                print(level_of_effort)
+
+                if (level_of_effort == "Low"):
+                    level_of_effort = 2
+
+                elif (level_of_effort == "Medium"):
+                    level_of_effort = 4
+
+                elif (level_of_effort == "High"):
+                    level_of_effort = 6
+                else:
+                    level_of_effort = 2           
+            
+            except:
+                level_of_effort = 2
             start_date = issue["fields"].get("customfield_10022", None)
             due_date = issue["fields"].get("customfield_10023", None)
 
