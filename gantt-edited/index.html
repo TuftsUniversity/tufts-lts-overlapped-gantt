@@ -1,0 +1,77 @@
+<!--<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gantt Chart Generator</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <h1>Gantt Chart Generator</h1>
+    <label labelfor="fileInput">Upload Excel File</label>
+    <input type="file" id="fileInput" accept=".xlsx, .xls">
+    <button id="generate-btn">Generate Gantt Chart</button>
+
+    <script>
+        $(document).ready(function() {
+            $('#generate-btn').click(function() {
+                $.post('/generate', function(response) {
+                    alert(response.message);
+                });
+            });
+        });
+    </script>
+</body>
+</html>-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gantt Chart Generator</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <h1>Gantt Chart Generator</h1>
+    <form id="upload-form" enctype="multipart/form-data">
+        <label for="fileInput">Upload Excel File</label>
+        <input type="file" id="fileInput" name="file" accept=".xlsx, .xls">
+
+        <button type="button" id="upload-btn">Upload</button>
+    </form>
+
+    <script>
+        $(document).ready(function() {
+            $('#upload-btn').click(function() {
+          var formData = new FormData($('#upload-form')[0]);
+          var fileInput = $('#fileInput')[0].files[0];
+
+          if (fileInput) {
+              console.log('File name:', fileInput.name);
+              console.log('File type:', fileInput.type);
+          } else {
+              console.log('No file selected');
+              alert('Please select a file.');
+              return;
+          }
+
+          $.ajax({
+              url: '/upload',
+              type: 'POST',
+              data: formData,
+              processData: false, // Important!
+              contentType: false, // Important!
+              success: function(response) {
+                  alert(response.message);
+              },
+              error: function(jqXHR, textStatus, errorThrown) {
+                  alert("Upload failed: " + textStatus);
+              }
+          });
+      });
+
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gantt Chart Generator</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}"> 
+</head>
+<body>
+    <div id="hourglass" style="display:none">
+        <div class="spinner"></div>
+    </div>
+    <header>
+        <div class="logo">Tufts Libraries</div> 
+    </header>
+
+    <div class="content">
+    
+
+        <!-- Download Sample Input File Section -->
+       
+        <div class="form-row"></div><h1>Gantt Chart Generator</h1></div>
+        
+        <form id="upload-form" enctype="multipart/form-data">
+            
+            
+             <label class="label" for="download">Download example: </label><a href="{{url_for('static', filename='template.xlsx')}}">template.xlsx</a>
+
+            
+            <br/>
+            <div class="form-row">
+                               <label class="label" for="fileInput">Upload Excel File:</label>
+                <input type="file" id="fileInput" name="file" accept=".xlsx, .xls">
+
+                <button type="button" id="upload-btn">Upload and Generate Gantt Chart</button>
+            </div>
+            <div style="display: none;" id="download-container">
+                <button type="button" id="download-btn">Download Result</button>
+            </div>
+        </form>
+        
+        <!-- Explanation paragraph -->
+        <div id="app-description"><p>
+            This app allows you to visualize your projects for a given period of time as a solid 2-dimensional block using broken bar charts.  </p><p>While most Gantt charts have a separate row for each project, this chart uses the y-axis, which is normally synonymous with separate projects, as continuous date ranges such that once one project ends, another can begin. This allows you to see if you are arranging projects in the optimal way given bandwidth at given times, and adjust start and end dates if possible.
+            </p><p><strong>Download the template file above to see the format to upload your project file in.</strong>  This file can also be fed into the generator.</p>
+            </div>
+    
+        <!-- Image placeholder -->
+        <div>
+            <img id="output" alt="Generated Gantt Chart" />
+        </div>
+        <!-- Hourglass animation -->
+    
+
+    </div>
+
+    <script>
+        $(document).ready(function () {
+            $('#upload-btn').click(function () {
+                const fileInput = $('#fileInput')[0].files[0];
+
+                if (!fileInput) {
+                    alert('Please select a file.');
+                    return;
+                }
+
+                // Prepare FormData with the selected file
+                const formData = new FormData();
+                formData.append('file', fileInput);
+                $('#hourglass').show();
+                // Upload the file to the /upload route
+                $.ajax({
+                    url: '/upload',
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function (response) {
+                     
+
+                        // Prepare FormData for /generate route
+                        const generateFormData = new FormData();
+                        generateFormData.append('file', fileInput);
+
+                        // Send the file to the /generate route
+                        fetch('/generate', {
+                            method: 'POST',
+                            body: generateFormData
+                        })
+                        .then(response => response.json())
+            .then(data => {
+                 // Hide the spinner when the response is received
+                if (data.status === 'success') {
+                    $('#hourglass').hide();
+                    $('#app-description').hide();
+                    $('#download-container').show();  // Show download button
+
+                    // Set download button to point to the correct URL
+                    $('#output').attr('src', 'data:image/png;base64,' + data.image_data);
+                    $('#output').show();
+                    // Set up the download button to trigger the download
+                    $('#download-btn').off('click').on('click', function () {
+                       // Create a Blob from the base64 data and trigger download
+                        const byteCharacters = atob(data.image_data);  // Decode base64 string
+                        const byteNumbers = new Array(byteCharacters.length).fill().map((_, i) => byteCharacters.charCodeAt(i));
+                        const byteArray = new Uint8Array(byteNumbers);
+                        const blob = new Blob([byteArray], { type: 'image/png' });
+
+                        const url = window.URL.createObjectURL(blob);  // Create Blob URL
+                        const a = document.createElement('a');  // Create <a> element for download
+                        a.href = url;
+                        a.download = 'gantt_chart.png';  // Set download filename
+                        document.body.appendChild(a);
+                        a.click();  // Simulate click to trigger download
+                        document.body.removeChild(a);  // Clean up DOM
+                        window.URL.revokeObjectURL(url);  //
+                    })
+
+
+                    
+                } else {
+                    alert('Error: ' + data.message); // Display error message
+                    $('#app-description').show(); // Show the description again if there's an error
+                }
+            })
+            .catch(error => {
+                $('#hourglass').hide();
+                alert('Error: ' + error.message);
+            });
+                    },
+                    error: function (jqXHR, textStatus) {
+                        alert('Upload failed: ' + textStatus);
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

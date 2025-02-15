@@ -1,0 +1,8 @@
+Flask
+pandas
+plotly
+matplotlib
+openpyxl
+numpy
+Werkzeug
+gunicorn

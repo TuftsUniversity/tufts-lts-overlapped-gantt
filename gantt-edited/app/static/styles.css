@@ -1,0 +1,201 @@
+@property --tufts-blue {
+    syntax: "<color>";
+    inherits: false;
+    initial-value: #3172AE;
+  }
+  @property --heading-blue {
+    syntax: "<color>";
+    inherits: false;
+    initial-value: #002E6D;
+  }
+  @property --light-gray{
+    syntax: "<color>";
+    inherits: false;
+    initial-value: #F2F2F2;
+  }
+
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+}
+header{
+  background-color: var(--tufts-blue);
+  width: 100%;
+  
+}
+
+form{
+  display: flex;
+  flex-flow: row wrap;
+  /* align-items: center; */
+}
+header .logo{
+  padding: 1em;
+  font-size: 1.5em;
+  font-weight: bold;
+  color: white;
+}
+.content{
+    margin: 0 2em;
+}
+h1, h2, .label {
+  color: var(--heading-blue);
+}
+
+
+
+#upload-form {
+  display: flex;
+  flex-direction: column; /* Arrange form rows vertically */
+  gap: 15px; /* Space between rows */
+  max-width: 800px;
+  margin: 3em; /* Center the form horizontally */
+}
+
+.form-row {
+  display: flex; /* Align items horizontally */
+  align-items: left; /* Align items vertically */
+  gap: 15px; /* Space between label, input, and button */
+  width: 100%; /* Ensure the row takes full width */
+}
+
+.label{
+  flex: 0 0 150px; /* Fixed width for labels */
+  text-align: left; /* Align label text to the right */
+  white-space: nowrap; /* Prevent label text from wrapping */
+  font-size: 1em;
+  font-weight: bold;
+  color: var(--heading-blue);
+  margin-right:5em;
+}
+
+
+
+input[type="file"],
+a {
+  flex: 1; /* Take remaining space in the row */
+  max-width: calc(100% - 160px); /* Prevent overflow */
+}
+
+button {
+  flex-shrink: 0; /* Prevent button from shrinking */
+}
+
+#output {
+  width: auto;      /* Ensure the image fits the full width of the screen */
+  height: 80vh;     /* Use 70% of the viewport height (above the fold) */
+  object-fit: fill; /* Allow the image to stretch and fill the space */
+  display: none;    /* Initially hidden */
+}
+.input{
+	float:left;
+	width:15%;
+	clear:both;
+}
+
+button {
+  grid-column: span 2; /* Make the button span both columns */
+  justify-self: center; /* Center the button */
+}
+
+h1 {
+  margin-top: 1em;
+}
+h2{
+ margin-top: 2em;
+}
+.vhide{
+    position: absolute !important;
+    overflow: hidden !important;
+    clip: rect(1px, 1px, 1px, 1px);
+    width: 1px;
+    height: 1px;
+    word-wrap: normal;
+}
+label{
+	width:5%;
+}
+table{
+ @media all and (max-width: 500px){
+    width: 100%;
+ }
+ width: 60%;
+ 
+}
+
+
+table td{
+    padding: 0.5em;
+
+}
+table th{
+    border-bottom: 1px solid gray;
+}
+table tr:nth-of-type(even){
+    background-color: var(--light-gray);
+}
+button{
+    background-color: darkblue;
+    color: white;
+    padding: 0.5em;
+    border: none;
+    border-radius: 0.25em;
+}
+input[type="file"]{
+    padding: 0.5em;
+    background-color: var(--light-gray);
+}
+/* Hourglass animation styling */
+/* .hourglass {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #000;
+  border-radius: 50%;
+  border-top-color: transparent;
+  border-left-color: transparent;
+  animation: spin 1s linear infinite;
+  margin: 20px auto;
+} */
+
+@keyframes spin {
+  0% {
+      transform: rotate(0deg);
+  }
+  100% {
+      transform: rotate(360deg);
+  }
+}
+
+.input{
+	float:left;
+	width:15%;
+	clear:both;
+}
+#hourglass {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 9999;
+}
+.spinner {
+  border: 16px solid #f3f3f3;
+  border-top: 16px solid #3498db;
+  border-radius: 50%;
+  width: 120px;
+  height: 120px;
+  animation: spin 2s linear infinite;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+
+#app-description {
+
+  text-align: left;  /* Left-align the text */
+  font-size: 1em;
+  color: var(--heading-blue);
+  margin: 3em 5em 3em 3em;  
+}

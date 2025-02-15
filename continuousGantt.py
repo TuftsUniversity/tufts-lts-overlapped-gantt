@@ -14,6 +14,7 @@ from itertools import cycle
 from matplotlib.pyplot import cm
 import numpy as np
 import re
+import textwrap
 #import plotly.graph_objects as go
 filename = askopenfilename(title="Select project sheet")
 
@@ -135,7 +136,9 @@ color = iter(cm.rainbow(array))
 # Plotting the area chart
 # palette = cycle(pex.colors.qualitative.Bold)
 # plt.style.use('ggplot')
-
+def wrap_text(text, width=5):
+    """Wraps the text to a specified width."""
+    return '\n'.join(textwrap.wrap(text, width=width))
 df = df.reset_index()
 for l in range(0, len(df)):
     #print(df.loc[l, 'start'])
@@ -147,19 +150,25 @@ for l in range(0, len(df)):
     #print(type(pd.to_datetime(finish)))
     #print(type(pd.to_datetime(finish)))
     #gnt.broken_barh([(pd.to_datetime(start).timestamp(), pd.to_datetime(finish).timestamp()-pd.to_datetime(start).timestamp())], [int(df.loc[l, 'bandwidth']), int(df.loc[l, 'effort'])], color=next(color))
-    gnt.broken_barh([(pd.to_datetime(start), pd.to_datetime(finish)-pd.to_datetime(start))], [int(df.loc[l, 'stack']), int(df.loc[l, 'level_of_effort'])], color=next(color), label=df.loc[l, 'task'])
-
+    #gnt.broken_barh([(pd.to_datetime(start), pd.to_datetime(finish)-pd.to_datetime(start))], [int(df.loc[l, 'stack']), int(df.loc[l, 'level_of_effort'])], color=next(color), label=df.loc[l, 'task'])
+    gnt.broken_barh(
+            [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
+            [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+            color=next(color),
+            label=wrap_text(df.loc[l, "task"])
+        )
     data = [(pd.to_datetime(start), pd.to_datetime(finish)-pd.to_datetime(start))]
 
     # print(data)
     for x1, x2 in data:
+        wrapped_task = wrap_text(df.loc[l, 'task'], width=10)
         gnt.text(x= x1 + x2/2,
                 y= (int(df.loc[l, 'stack']) + int(df.loc[l, 'level_of_effort'])) - int(df.loc[l, 'level_of_effort'])/2,
-                s=df.loc[l,  'task'],
+                s=wrapped_task,
                 ha='center',
                 va='center',
                 color='blue',
-                fontsize='xx-small',
+                fontsize='xx-small'
 
                )
 
@@ -184,9 +193,34 @@ gnt.set_ylabel("Hours per Day")
 #fig.show()
 # gantt.update_traces(width=width_list)
 #fig.write_image("yourfile.png")
+ # Add the unwrapped label to the legend (if not already added)
+def wrap_text(text, width=20):
+    """Wraps the text to a specified width."""
+    return '\n'.join(textwrap.wrap(text, width=width))
 
-fig.legend(ncol=3)
+# Assuming we are in a loop for the data
+for x1, x2 in data:
+    # Wrapped text for the Gantt chart labels
+    wrapped_task = wrap_text(df.loc[l, 'task'], width=10)  # Adjust the width as needed
 
+    # Text for the chart itself
+    gnt.text(
+        x=x1 + x2/2,
+        y=(int(df.loc[l, 'stack']) + int(df.loc[l, 'level_of_effort'])) - int(df.loc[l, 'level_of_effort'])/2,
+        s=wrapped_task,
+        ha='center',
+        va='center',
+        color='blue',
+        fontsize='xx-small'
+    )
+
+# Use the unwrapped text for the legend
+handles, labels = gnt.get_legend_handles_labels()
+# Optionally, update `labels` to use the unwrapped task titles for the legend
+labels = [df.loc[l, 'task'] for l in df.index]  # Ensure to keep the unwrapped original titles
+
+# Create the legend using the original (unwrapped) task titles
+fig.legend(handles, labels, ncol=3)
 top_value_benchmark = .710/10
 
 top_value = top_value_benchmark * new_max_height_plus_level_of_effort
