@@ -42,13 +42,13 @@ def fetch_API(label, assignee):
     if response.status_code in [200, 201, 202, 203, 204]:
         # Create DataFrame with additional column for Assignee
         df = pd.DataFrame(
-            columns=["Title", "level_of_effort", "Start date", "Due date", "Assignee"]
+            columns=["Title", "level_of_effort", "Start date", "Due date", "Assignee", "Status"]
         )
         issues = response.json()["issues"]
         rows = []
 
         for issue in issues:
-            
+            print(issue)
             title = issue["fields"]["summary"]
             
             try:
