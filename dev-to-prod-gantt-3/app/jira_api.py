@@ -48,7 +48,7 @@ def fetch_API(label, assignee):
         rows = []
 
         for issue in issues:
-            print(issue)
+            status = issue['fields']['status']['name']
             title = issue["fields"]["summary"]
             
             try:
@@ -88,12 +88,12 @@ def fetch_API(label, assignee):
             )
 
             # Append the row with the new Assignee column
-            rows.append([title, level_of_effort, start_date, due_date, assignee])
+            rows.append([title, level_of_effort, start_date, due_date, assignee, status])
 
         # Create DataFrame
         df = pd.DataFrame(
             rows,
-            columns=["Title", "level_of_effort", "Start date", "Due date", "Assignee"],
+            columns=["Title", "level_of_effort", "Start date", "Due date", "Assignee", "Status"],
         )
         
 

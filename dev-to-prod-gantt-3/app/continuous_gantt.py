@@ -175,30 +175,37 @@ def generate_gantt_chart(jira_json):
     
     color = iter(cm.rainbow(array))
 
-
+    
     df = df.reset_index()
+    
     for l in range(0, len(df)):
         start = datetime.strptime(df.loc[l, "start_date"], "%Y-%m-%d")
         finish = datetime.strptime(df.loc[l, "end_date"], "%Y-%m-%d")
-        status = ""
-        if status == "Complete":
-            color=next(color)
-            edgecolor=next(color)
+        status = df.loc[l, "Status"]
+        next_color = next(color)
+        
+        if status == "Completed":
+            color_value = next_color
+            edgecolor = next_color
             hatch = ''
         elif status == "In Progress":
-            color="white"
-            edgecolor=next(color)
+            color_value = "white"
+            edgecolor = next_color
             hatch="--"
 
         elif status == "Not Started":
-            color = "white"
-            edgecolor = next(color)
+            color_value = "white"
+            edgecolor = next_color
             hatch = ''
+        else:
+            color_value = "black"
+            edgecolor = "black"
+            hatch = '--'
         # Use the wrap_text function to wrap the Title field for the label
         gnt.broken_barh(
             [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
             [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
-            color=color, edgecolor = edgecolor, hatch = hatch,
+            color=color_value, edgecolor = edgecolor, hatch = hatch, linewidth=3,
             label=wrap_text(df.loc[l, "Title"]),
         )
         # gnt.broken_barh(

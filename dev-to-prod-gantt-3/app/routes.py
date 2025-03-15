@@ -20,11 +20,11 @@ app = Flask(__name__)
 
 UPLOAD_FOLDER = "./uploads"
 ALLOWED_EXTENSIONS = {"xlsx", "xls"}
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+#app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 
 @main.route('/', methods=['GET', 'POST'])
-@login_required
+#@login_required
 def index():
 
     return render_template('index.html')
@@ -65,7 +65,7 @@ def fetchAPI():
 
     response = fetch_API(request.args["label"], request.args["assignee"])
 
-    print(response)
+    
     return response
 
 
@@ -90,21 +90,21 @@ def generate():
     # Process the data (this part should contain your processing logic)
     projects_df = data.get("projects_df")
 
-    try:
-        # Your logic here
-        # For example, generating a chart and returning the image data
-        # In this case, we will simulate the result for demo purposes
+    #try:
+    # Your logic here
+    # For example, generating a chart and returning the image data
+    # In this case, we will simulate the result for demo purposes
 
-        result = generate_gantt_chart(projects_df)
+    result = generate_gantt_chart(projects_df)
 
-        print(projects_df)
-        result.seek(0)
-        img_base64 = base64.b64encode(result.getvalue()).decode("utf-8")
+    
+    result.seek(0)
+    img_base64 = base64.b64encode(result.getvalue()).decode("utf-8")
 
-        return jsonify({"status": "success", "image_data": img_base64})
-    except Exception as e:
-        print(f"Error processing data: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+    return jsonify({"status": "success", "image_data": img_base64})
+    #except Exception as e:
+    #    print(f"Error processing data: {e}")
+    #    return jsonify({"status": "error", "message": str(e)}), 500
 
 
 # @main.route("/generate", methods=["POST"])
