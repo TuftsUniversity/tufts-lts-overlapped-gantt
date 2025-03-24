@@ -1,189 +1,85 @@
 import pandas as pd
-import plotly.express as pex
 import matplotlib.pyplot as plt
-from openpyxl import load_workbook
-from datetime import datetime
 from matplotlib.pyplot import cm
+from datetime import datetime
 import numpy as np
-import os
 from io import BytesIO
-import logging
 import textwrap
-import json
-
-from flask import Flask, request, jsonify, current_app
+import mplcursors
 
 
 def wrap_text(text, width=20):
-    """Wraps the text to a specified width."""
+    """Wraps the text to a specified width for labels."""
     return "\n".join(textwrap.wrap(text, width=width))
 
 
 def generate_gantt_chart(jira_json):
-    
-
+    # Load the data from JSON
     projects_df = pd.DataFrame.from_dict(jira_json["data"], orient="index")
 
-    # print(projects_df)
-    # projects_df = jira_json.copy(0)
-    # projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("float")
-    # projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("Int64")
-
+    # Default level_of_effort if all are null
     if projects_df['level_of_effort'].isnull().all():
-      projects_df["level_of_effort"] = 2
+        projects_df['level_of_effort'] = 2
+
     projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("Int64")
     projects_df["stack"] = 0
-    # print(projects_df)
-    projects_df = projects_df.sort_values(["Start date", "Due date", "level_of_effort"])
-    projects_df = projects_df.rename(
-        columns={"Start date": "start_date", "Due date": "end_date"}
-    )
-    pd.set_option("display.max_columns", None)
-    pd.options.display.max_colwidth = 200
 
+    # Rename columns for consistency
+    projects_df = projects_df.rename(columns={"Start date": "start_date", "Due date": "end_date"})
     projects_df = projects_df.dropna(subset=["start_date", "end_date"])
-    projects_df["start_date"] = projects_df["start_date"].apply(
-        lambda x: x.replace(" 00:00:00", "")
-    )
-    projects_df["end_date"] = projects_df["end_date"].apply(
-        lambda x: x.replace(" 00:00:00", "")
-    )
 
-    min_start_date = (
-        projects_df["start_date"]
-        .apply(lambda x: datetime.strptime(x, "%Y-%m-%d"))
-        .min()
-    )
+    # Clean and convert date columns
+    projects_df["start_date"] = pd.to_datetime(projects_df["start_date"].astype(str).str.replace(" 00:00:00", ""))
+    projects_df["end_date"] = pd.to_datetime(projects_df["end_date"].astype(str).str.replace(" 00:00:00", ""))
 
-    max_end_date = (
-        projects_df["end_date"].apply(lambda x: datetime.strptime(x, "%Y-%m-%d")).max()
-    )
+    # Sort for consistent stacking
+    projects_df = projects_df.sort_values(["start_date", "end_date", "level_of_effort"])
 
-    delta = max_end_date - min_start_date
-    length_of_matrix = delta
+    # Create the plotting matrix
+    min_start_date = projects_df["start_date"].min()
+    max_end_date = projects_df["end_date"].max()
+    date_range = pd.date_range(start=min_start_date, end=max_end_date)
+    height_of_matrix = max(int(projects_df["level_of_effort"].sum()), 7)
 
-    delta = int(delta.total_seconds() / 60 / 60 / 24)
-    height_of_matrix = int(projects_df["level_of_effort"].sum())
-    if height_of_matrix < 7:
-        height_of_matrix = 7
-    rows, cols = (delta, height_of_matrix)
-    arr = [[0] * cols] * rows
+    # Integer-based index for stack levels
+    stack_levels = list(reversed(range(height_of_matrix)))
+    master_plotting_df = pd.DataFrame(0, index=stack_levels, columns=date_range)
 
-    date_range = pd.date_range(min_start_date, max_end_date)
+    # Assign stack levels avoiding overlap
+    for i, row in projects_df.iterrows():
+        start = row["start_date"]
+        end = row["end_date"]
+        effort = int(row["level_of_effort"])
+        date_slice = pd.date_range(start, end)
 
-    range_list = list(reversed(list(range(0, height_of_matrix))))
+        for y in range(height_of_matrix - effort + 1):
+            row_slice = list(range(y, y + effort))
+            slice_df = master_plotting_df.loc[row_slice, date_slice]
 
-    for z in range(0, len(range_list)):
-        range_list[z] = str(range_list[z])
-
-    projects_df = projects_df.sort_values(
-        ["start_date", "end_date", "level_of_effort"],
-        ascending=[True, False, True],  # Specify the sorting order for each column
-    )
-    master_plotting_df = pd.DataFrame(columns=date_range, index=range_list)
-    master_plotting_df = master_plotting_df.applymap(lambda x: 0)
-
-    project_plotting_df = master_plotting_df.copy()
-
-    for x in range(0, len(projects_df)):
-        y = 0
-        while (
-            y + int(projects_df.iloc[x, projects_df.columns.get_loc("level_of_effort")])
-            < height_of_matrix
-        ):
-            project_dates_and_effort_df = project_plotting_df.loc[
-                str(
-                    y
-                    + int(
-                        projects_df.iloc[
-                            x, projects_df.columns.get_loc("level_of_effort")
-                        ]
-                    )
-                    - 1
-                ) : str(y),
-                projects_df.iloc[
-                    x, projects_df.columns.get_loc("start_date")
-                ] : projects_df.iloc[x, projects_df.columns.get_loc("end_date")],
-            ]
-
-            if project_dates_and_effort_df.equals(
-                master_plotting_df.loc[
-                    str(
-                        y
-                        + int(
-                            projects_df.iloc[
-                                x, projects_df.columns.get_loc("level_of_effort")
-                            ]
-                        )
-                        - 1
-                    ) : str(y),
-                    projects_df.iloc[
-                        x, projects_df.columns.get_loc("start_date")
-                    ] : projects_df.iloc[x, projects_df.columns.get_loc("end_date")],
-                ]
-            ):
-                projects_df.iloc[x, projects_df.columns.get_loc("stack")] = y
-
-                master_plotting_df.loc[
-                    str(
-                        y
-                        + int(
-                            projects_df.iloc[
-                                x, projects_df.columns.get_loc("level_of_effort")
-                            ]
-                        )
-                        - 1
-                    ) : str(y),
-                    projects_df.iloc[
-                        x, projects_df.columns.get_loc("start_date")
-                    ] : projects_df.iloc[x, projects_df.columns.get_loc("end_date")],
-                ] = master_plotting_df.loc[
-                    str(
-                        y
-                        + int(
-                            projects_df.iloc[
-                                x, projects_df.columns.get_loc("level_of_effort")
-                            ]
-                        )
-                        - 1
-                    ) : str(y),
-                    projects_df.iloc[
-                        x, projects_df.columns.get_loc("start_date")
-                    ] : projects_df.iloc[x, projects_df.columns.get_loc("end_date")],
-                ].applymap(
-                    lambda z: 1
-                )
-
-                y += 1
+            if (slice_df != 0).any().any():
+                continue  # overlap, try next level
+            else:
+                # No conflict – assign and mark
+                projects_df.at[i, "stack"] = y
+                master_plotting_df.loc[row_slice, date_slice] = 1
                 break
 
-            else:
-                y += 1
-
-    new_max_height_df = projects_df.copy()
-    new_max_height = projects_df["stack"].max()
-    new_max_height_df = projects_df[projects_df["stack"] == new_max_height]
-    new_max_height_plus_level_of_effort = (
-        int(new_max_height_df["level_of_effort"].max()) + new_max_height
-    )
-
-    df = projects_df.copy()
-
+    # Plotting
     fig, gnt = plt.subplots(figsize=(16, 10))
-    array = np.linspace(0, 1, len(df))
-    np.random.shuffle(array)
-    
-    color = iter(cm.rainbow(array))
+    color_cycle = iter(cm.rainbow(np.linspace(0, 1, len(projects_df))))
+    projects_df = projects_df.reset_index()
 
-    
-    df = df.reset_index()
-    
-    for l in range(0, len(df)):
-        start = datetime.strptime(df.loc[l, "start_date"], "%Y-%m-%d")
-        finish = datetime.strptime(df.loc[l, "end_date"], "%Y-%m-%d")
-        status = df.loc[l, "Status"]
-        next_color = next(color)
-        
+    for idx, row in projects_df.iterrows():
+        start = row["start_date"]
+        end = row["end_date"]
+        duration = end - start
+        stack = int(row["stack"])
+        effort = int(row["level_of_effort"])
+        status = row["Status"]
+        title = wrap_text(row["Title"])
+        next_color = next(color_cycle)
+
+        # Define styling based on status
         if status == "Completed":
             color_value = next_color
             edgecolor = next_color
@@ -191,8 +87,7 @@ def generate_gantt_chart(jira_json):
         elif status == "In Progress":
             color_value = "white"
             edgecolor = next_color
-            hatch="--"
-
+            hatch = '--'
         elif status == "Not Started":
             color_value = "white"
             edgecolor = next_color
@@ -201,59 +96,48 @@ def generate_gantt_chart(jira_json):
             color_value = "black"
             edgecolor = "black"
             hatch = '--'
-        # Use the wrap_text function to wrap the Title field for the label
+
+        # Draw bar
         gnt.broken_barh(
-            [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
-            [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
-            color=color_value, edgecolor = edgecolor, hatch = hatch, linewidth=3,
-            label=wrap_text(df.loc[l, "Title"]),
+            [(start, duration)],
+            [stack, effort],
+            color=color_value,
+            edgecolor=edgecolor,
+            hatch=hatch,
+            linewidth=3,
+            label=title,
         )
-        # gnt.broken_barh(
-        #     [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
-        #     [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
-        #     color=next(color),
-        #     label=df.loc[l, "Title"],
-        # )
 
-        data = [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))]
+        # Add centered label
+        gnt.text(
+            x=start + duration / 2,
+            y=stack + effort / 2,
+            s=title,
+            ha="center",
+            va="center",
+            color="blue",
+            fontsize="medium",
+        )
 
-        for x1, x2 in data:
-            gnt.text(
-                x=x1 + x2 / 2,
-                y=(int(df.loc[l, "stack"]) + int(df.loc[l, "level_of_effort"]))
-                - int(df.loc[l, "level_of_effort"]) / 2,
-                s=wrap_text(df.loc[l, "Title"]),
-                ha="center",
-                va="center",
-                color="blue",
-                fontsize="medium",
-            )
+    # Hover tooltips with mplcursors
+    cursor = mplcursors.cursor(gnt.collections, hover=True)
+
+    @cursor.connect("add")
+    def on_hover(sel):
+        index = sel.index
+        sel.annotation.set_text(f"Next Steps: {projects_df.loc[index, 'Next Steps']}")
+        sel.annotation.get_bbox_patch().set_boxstyle("round,pad=0.3")
+
+    # Final layout
+    gnt.set_xlabel("Date")
+    gnt.set_ylabel("Rough Average Hours per Day\nEffort Level: Low=2, Medium=4, High=6")
 
     fig.tight_layout()
-    gnt.set_xlabel("Date")
-    gnt.set_ylabel("Rough Average Hours per Day\nEffort Level: Low=2, Medium=4, High= 6, Average for Project.  Most projects of any length are Low=2")
-
-    #fig.legend(loc="upper left")
-
-    # top_value_benchmark = 0.710 / 10
-    # top_value = top_value_benchmark * new_max_height_plus_level_of_effort
-
     plt.subplots_adjust(left=0.1, right=0.9, bottom=0.2, top=0.9)
-    # plt.xticks(rotation=45)
-    # plt.show(block=True)
-    # Generate the plot
+
+    # Save as image in memory
     img = BytesIO()
     plt.savefig(img, format="png")
     img.seek(0)
 
-    #(img, flush=True)
     return img
-    # plot_url = base64.b64encode(img.getvalue()).decode("utf8")
-
-    # Use send_file to return the image for download
-    # return send_file(img, mimetype='image/png', as_attachment=True, download_name='chart.png')
-    # Create static/images directory if it doesn't exist
-    # os.makedirs('static/images', exist_ok=True)
-
-    # Save the file
-    # plt.savefig('static/images/chart.png')
