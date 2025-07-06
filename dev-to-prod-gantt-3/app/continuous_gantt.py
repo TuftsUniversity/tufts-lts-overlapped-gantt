@@ -10,6 +10,7 @@ from io import BytesIO
 import logging
 import textwrap
 import json
+import matplotlib.patches as mpatches
 
 from flask import Flask, request, jsonify, current_app
 
@@ -21,16 +22,23 @@ def wrap_text(text, width=20):
 
 def generate_gantt_chart(jira_json):
     
-
     projects_df = pd.DataFrame.from_dict(jira_json["data"], orient="index")
+    with pd.option_context('display.max_columns', None):
+        print(projects_df)
 
     # print(projects_df)
     # projects_df = jira_json.copy(0)
     # projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("float")
     # projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("Int64")
 
-    if projects_df['level_of_effort'].isnull().all():
-      projects_df["level_of_effort"] = 2
+    projects_df = projects_df.reset_index()
+    if projects_df.loc[0, 'Parent Project'] != "":
+
+      projects_df["level_of_effort"] = 1
+
+    elif projects_df['level_of_effort'].isnull().all() and projects_df['Parent Project'].isnull().all():
+        projects_df["level_of_effort"] = 2
+
     projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("Int64")
     projects_df["stack"] = 0
     # print(projects_df)
@@ -168,86 +176,216 @@ def generate_gantt_chart(jira_json):
     )
 
     df = projects_df.copy()
-
-    fig, gnt = plt.subplots(figsize=(16, 10))
-    array = np.linspace(0, 1, len(df))
-    np.random.shuffle(array)
-    
-    color = iter(cm.rainbow(array))
-
-    
     df = df.reset_index()
-    
-    for l in range(0, len(df)):
-        start = datetime.strptime(df.loc[l, "start_date"], "%Y-%m-%d")
-        finish = datetime.strptime(df.loc[l, "end_date"], "%Y-%m-%d")
-        status = df.loc[l, "Status"]
-        next_color = next(color)
+    if df.loc[0, 'Parent Project'] != "":
+        unique_parents = df["Parent Project"].unique()
+        parent_color_map = {
+            parent: cm.rainbow(i / len(unique_parents))
+            for i, parent in enumerate(unique_parents)
+        }
+        fig, gnt = plt.subplots(figsize=(12, 6))
+
+
+        #array = np.linspace(0, 1, len(df))
+        #np.random.shuffle(array)
         
-        if status == "Completed":
-            color_value = next_color
-            edgecolor = next_color
-            hatch = ''
-        elif status == "In Progress":
-            color_value = "white"
-            edgecolor = next_color
-            hatch="--"
+        #color = iter(cm.rainbow(array))
+        
 
-        elif status == "Not Started":
-            color_value = "white"
-            edgecolor = next_color
-            hatch = ''
-        else:
-            color_value = "black"
-            edgecolor = "black"
-            hatch = '--'
-        # Use the wrap_text function to wrap the Title field for the label
-        gnt.broken_barh(
-            [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
-            [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
-            color=color_value, edgecolor = edgecolor, hatch = hatch, linewidth=3,
-            label=wrap_text(df.loc[l, "Title"]),
-        )
-        # gnt.broken_barh(
-        #     [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
-        #     [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
-        #     color=next(color),
-        #     label=df.loc[l, "Title"],
-        # )
+        
+        #df = df.reset_index()
+        
+        for l in range(0, len(df)):
+            start = datetime.strptime(df.loc[l, "start_date"], "%Y-%m-%d")
+            finish = datetime.strptime(df.loc[l, "end_date"], "%Y-%m-%d")
+            status = df.loc[l, "Status"]
+            parent_project = df.loc[l, "Parent Project"]
+            parent_color = parent_color_map[parent_project]
+            
+            
+            if status == "Completed":
+                color_value = parent_color
+                edgecolor = parent_color
+                hatch = ''
+            elif status == "In Progress":
+                color_value = "white"
+                edgecolor = parent_color
+                hatch="--"
 
-        data = [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))]
-
-        for x1, x2 in data:
-            gnt.text(
-                x=x1 + x2 / 2,
-                y=(int(df.loc[l, "stack"]) + int(df.loc[l, "level_of_effort"]))
-                - int(df.loc[l, "level_of_effort"]) / 2,
-                s=wrap_text(df.loc[l, "Title"]),
-                ha="center",
-                va="center",
-                color="blue",
-                fontsize="medium",
+            elif status == "Not Started":
+                color_value = "white"
+                edgecolor = parent_color
+                hatch = ''
+            else:
+                color_value = "black"
+                edgecolor = "black"
+                hatch = '--'
+            # Use the wrap_text function to wrap the Title field for the label
+            gnt.broken_barh(
+                [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
+                [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+                color=color_value, edgecolor = edgecolor, hatch = hatch, linewidth=3,
+                label=wrap_text(df.loc[l, "Title"]),
             )
+            # gnt.broken_barh(
+            #     [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
+            #     [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+            #     color=next(color),
+            #     label=df.loc[l, "Title"],
+            # )
 
-    fig.tight_layout()
-    gnt.set_xlabel("Date")
-    gnt.set_ylabel("Rough Average Hours per Day\nEffort Level: Low=2, Medium=4, High= 6, Average for Project.  Most projects of any length are Low=2")
+            data = [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))]
+            
+            title_number_map = {
+                title: str(i + 1)
+                for i, title in enumerate(df["Title"].unique())
+            }
+            title_number = title_number_map[df.loc[l, "Title"]]
+            for x1, x2 in data:
+                gnt.text(
+                    x=x1 + x2 / 2,
+                    y=(int(df.loc[l, "stack"]) + int(df.loc[l, "level_of_effort"]))
+                    - int(df.loc[l, "level_of_effort"]) / 2,
+                    s=title_number,
+                    ha="center",
+                    va="center",
+                    color="blue",
+                    fontsize=6,
+                )
+        gnt.set_xlabel("Date")
+        gnt.set_ylabel("Rough Average Hours per Day\nEffort Level: Low=2, Medium=4, High= 6, Average for Project.  Most projects of any length are Low=2")
 
-    #fig.legend(loc="upper left")
+        parent_legend_handles = [    mpatches.Patch(color=color, label=wrap_text(parent, width=25))
+                for parent, color in parent_color_map.items()
+            ]
+        parent_legend_handles = [    mpatches.Patch(color=color, label=wrap_text(parent, width=25))
+            for parent, color in parent_color_map.items()
+        ]
+        legend2 = gnt.legend(
+            handles=parent_legend_handles,
+            loc="lower left",
+            bbox_to_anchor=(0.0, 0.0),
+            title="Parent Projects",
+            prop={'size': 6}
+        )
+        gnt.add_artist(legend2)
+        
+        # Title-number legend
+        title_legend_handles = [
+            mpatches.Patch(color="white", label=f"{num}: {wrap_text(title, width=40)}")
+            for title, num in title_number_map.items()
+        ]
+        legend1 = gnt.legend(
+            handles=title_legend_handles,
+            loc="upper left",
+            bbox_to_anchor=(1.02, 1.0),
+            title="Project Titles",
+            frameon=False,
+            prop={'size': 6}
+        )
+        gnt.add_artist(legend1)
+        # Shrink axis tick and label font sizes
+        gnt.tick_params(axis='both', which='major', labelsize=6)
+        gnt.xaxis.label.set_size(6)
+        gnt.yaxis.label.set_size(6)
+        # top_value_benchmark = 0.710 / 10
+        # top_value = top_value_benchmark * new_max_height_plus_level_of_effort
 
-    # top_value_benchmark = 0.710 / 10
-    # top_value = top_value_benchmark * new_max_height_plus_level_of_effort
+        plt.subplots_adjust(left=0.1, right=0.85, bottom=0.15, top=0.9)
+        # plt.xticks(rotation=45)
+        # plt.show(block=True)
+        # Generate the plot
+        img = BytesIO()
+        plt.savefig(img, format="png", dpi=100)
 
-    plt.subplots_adjust(left=0.1, right=0.9, bottom=0.2, top=0.9)
-    # plt.xticks(rotation=45)
-    # plt.show(block=True)
-    # Generate the plot
-    img = BytesIO()
-    plt.savefig(img, format="png")
-    img.seek(0)
+    
 
-    #(img, flush=True)
-    return img
+        img.seek(0)
+
+        #(img, flush=True)
+        return img
+
+    else:
+        fig, gnt = plt.subplots(figsize=(12, 6))  # half the height
+
+        array = np.linspace(0, 1, len(df))
+        np.random.shuffle(array)
+        
+        color = iter(cm.rainbow(array))
+
+        
+        #df = df.reset_index()
+        
+        for l in range(0, len(df)):
+            start = datetime.strptime(df.loc[l, "start_date"], "%Y-%m-%d")
+            finish = datetime.strptime(df.loc[l, "end_date"], "%Y-%m-%d")
+            status = df.loc[l, "Status"]
+            parent_project = df.loc[l, "Parent Project"]
+            next_color = next(color)
+            
+            if status == "Completed":
+                color_value = next_color
+                edgecolor = next_color
+                hatch = ''
+            elif status == "In Progress":
+                color_value = "white"
+                edgecolor = next_color
+                hatch="--"
+
+            elif status == "Not Started":
+                color_value = "white"
+                edgecolor = next_color
+                hatch = ''
+            else:
+                color_value = "black"
+                edgecolor = "black"
+                hatch = '--'
+            # Use the wrap_text function to wrap the Title field for the label
+            gnt.broken_barh(
+                [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
+                [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+                color=color_value, edgecolor = edgecolor, hatch = hatch, linewidth=3,
+                label=wrap_text(df.loc[l, "Title"]),
+            )
+            # gnt.broken_barh(
+            #     [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
+            #     [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+            #     color=next(color),
+            #     label=df.loc[l, "Title"],
+            # )
+
+            data = [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))]
+
+            for x1, x2 in data:
+                gnt.text(
+                    x=x1 + x2 / 2,
+                    y=(int(df.loc[l, "stack"]) + int(df.loc[l, "level_of_effort"]))
+                    - int(df.loc[l, "level_of_effort"]) / 2,
+                    s=wrap_text(df.loc[l, "Title"]),
+                    ha="center",
+                    va="center",
+                    color="blue",
+                    fontsize=6,
+                )
+        gnt.set_xlabel("Date")
+        gnt.set_ylabel("Rough Average Hours per Day\nEffort Level: Low=2, Medium=4, High= 6, Average for Project.  Most projects of any length are Low=2")
+
+        #fig.legend(loc="upper left")
+
+        # top_value_benchmark = 0.710 / 10
+        # top_value = top_value_benchmark * new_max_height_plus_level_of_effort
+
+        plt.subplots_adjust(left=0.1, right=0.9, bottom=0.2, top=0.9)
+        # plt.xticks(rotation=45)
+        # plt.show(block=True)
+        # Generate the plot
+        img = BytesIO()
+        plt.savefig(img, format="png", dpi=100)
+
+        img.seek(0)
+
+        #(img, flush=True)
+        return img
     # plot_url = base64.b64encode(img.getvalue()).decode("utf8")
 
     # Use send_file to return the image for download
@@ -257,3 +395,6 @@ def generate_gantt_chart(jira_json):
 
     # Save the file
     # plt.savefig('static/images/chart.png')
+
+
+

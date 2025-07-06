@@ -65,6 +65,12 @@
                <option value="Henry Steele">Henry Steele</option>
 
          </select>
+         <select id="level-select">
+            <option value="initiative">Initiative</option>
+            <option value="subtasks">Child Issues of Initiatives</option>
+            
+
+      </select>
          <div class="form-row" style="display: none;" id="download-container">
             <button type="button" id="download-btn">Download Result</button>
         </div>
@@ -80,10 +86,11 @@
 <!--<p><strong>Download the template file above to see the format to upload your project file in.</strong>  This file can also be fed into the generator.</p>-->
             </div>
 
-    <div>
-        <img id="output" src="" />
-
-    </div>
+            <div id="output-wrapper">
+                <img id="output" src="" />
+            </div>
+            
+            
     <script>
         $(document).ready(function() {
             $('#fetch-btn').click(function() {
@@ -94,7 +101,7 @@
    
                 var label = document.getElementById("label").value;
                 var assignee = document.getElementById("assignee-select").value;
-
+                var level = document.getElementById("level-select").value;
                 
                 //alert("Selected Label: " + label + ", Selected Assignee: " + assignee);
                 let list = [];
@@ -119,7 +126,7 @@
                 $.ajax({
                     url: '/fetchAPI', // Ensure this endpoint is handled by your local server
                     type: 'GET',
-                    data: { label: label, assignee: assignee },
+                    data: { label: label, assignee: assignee, level: level },
                     success: function(response) {
                         //alert(response.message);
                         fetch('/generate', { 

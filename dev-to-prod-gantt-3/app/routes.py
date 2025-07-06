@@ -24,7 +24,7 @@ ALLOWED_EXTENSIONS = {"xlsx", "xls"}
 
 
 @main.route('/', methods=['GET', 'POST'])
-#@login_required
+@login_required
 def index():
 
     return render_template('index.html')
@@ -63,7 +63,7 @@ def upload_file():
 def fetchAPI():
     print(request.args["label"])
 
-    response = fetch_API(request.args["label"], request.args["assignee"])
+    response = fetch_API(request.args["label"], request.args["assignee"], request.args['level'])
 
     
     return response
