@@ -88,85 +88,39 @@ def generate_gantt_chart(jira_json):
         ["start_date", "end_date", "level_of_effort"],
         ascending=[True, False, True],  # Specify the sorting order for each column
     )
-    master_plotting_df = pd.DataFrame(columns=date_range, index=range_list)
+    master_plotting_df = pd.DataFrame(
+    data=np.zeros((height_of_matrix, len(date_range)), dtype=int),
+    index=range(height_of_matrix),
+    columns=date_range
+)
+
     master_plotting_df = master_plotting_df.applymap(lambda x: 0)
 
     project_plotting_df = master_plotting_df.copy()
 
-    for x in range(0, len(projects_df)):
-        y = 0
-        while (
-            y + int(projects_df.iloc[x, projects_df.columns.get_loc("level_of_effort")])
-            < height_of_matrix
-        ):
-            project_dates_and_effort_df = project_plotting_df.loc[
-                str(
-                    y
-                    + int(
-                        projects_df.iloc[
-                            x, projects_df.columns.get_loc("level_of_effort")
-                        ]
-                    )
-                    - 1
-                ) : str(y),
-                projects_df.iloc[
-                    x, projects_df.columns.get_loc("start_date")
-                ] : projects_df.iloc[x, projects_df.columns.get_loc("end_date")],
-            ]
+    # Assign stack levels avoiding overlap
+    for i, row in projects_df.iterrows():
+        start = row["start_date"]
+        end = row["end_date"]
+        effort = int(row["level_of_effort"])
+        date_slice = pd.date_range(start, end)
 
-            if project_dates_and_effort_df.equals(
-                master_plotting_df.loc[
-                    str(
-                        y
-                        + int(
-                            projects_df.iloc[
-                                x, projects_df.columns.get_loc("level_of_effort")
-                            ]
-                        )
-                        - 1
-                    ) : str(y),
-                    projects_df.iloc[
-                        x, projects_df.columns.get_loc("start_date")
-                    ] : projects_df.iloc[x, projects_df.columns.get_loc("end_date")],
-                ]
-            ):
-                projects_df.iloc[x, projects_df.columns.get_loc("stack")] = y
+        for y in range(height_of_matrix - effort + 1):
+            row_slice = list(range(y, y + effort))  # keep as integers to match index
+            try:
+                slice_df = master_plotting_df.loc[row_slice, date_slice]
+            except KeyError as e:
+                logging.error(f"KeyError accessing plotting matrix at row {y}: {e}")
+                continue
 
-                master_plotting_df.loc[
-                    str(
-                        y
-                        + int(
-                            projects_df.iloc[
-                                x, projects_df.columns.get_loc("level_of_effort")
-                            ]
-                        )
-                        - 1
-                    ) : str(y),
-                    projects_df.iloc[
-                        x, projects_df.columns.get_loc("start_date")
-                    ] : projects_df.iloc[x, projects_df.columns.get_loc("end_date")],
-                ] = master_plotting_df.loc[
-                    str(
-                        y
-                        + int(
-                            projects_df.iloc[
-                                x, projects_df.columns.get_loc("level_of_effort")
-                            ]
-                        )
-                        - 1
-                    ) : str(y),
-                    projects_df.iloc[
-                        x, projects_df.columns.get_loc("start_date")
-                    ] : projects_df.iloc[x, projects_df.columns.get_loc("end_date")],
-                ].applymap(
-                    lambda z: 1
-                )
-
-                y += 1
+            if (slice_df != 0).any().any():
+                continue  # overlap, try next level
+            else:
+                # No conflict – assign and mark
+                projects_df.at[i, "stack"] = y
+                master_plotting_df.loc[row_slice, date_slice] = 1
                 break
 
-            else:
-                y += 1
 
     new_max_height_df = projects_df.copy()
     new_max_height = projects_df["stack"].max()
