@@ -1,0 +1,2263 @@
+
+2025-08-09T00:12:57.985866
+
+
+2025-08-09T00:24:38.903732
+In @@ -1,28 +1,28 @@
++@@ -0,0 +1,40 @@
++from flask import Flask
++import os
++from dotenv import load_dotenv
++from .routes import main
++from .auth import Auth
++
++class AppFactory:
++    """Class to create and configure the Flask app."""
++
++    def __init__(self):
++        load_dotenv()
++
++    def create_app(self):
++        app = Flask(__name__)
++        app.secret_key = os.getenv("FLASK_SECRET_KEY", "fallback-key-for-dev")
++        app.config["UPLOAD_FOLDER"] = "./uploads"
++        app.config["ALLOWED_EXTENSIONS"] = {"xlsx", "xls"}
++        app.config["BEARER_ACCESS_TOKEN"] = os.environ.get(
++            "BEARER_ACCESS_TOKEN", "default_secret_key"
++        )
+ 
+-        app.register_blueprint(main)
+-        app.register_blueprint(auth)
++        with app.app_context():
++            # Import and register blueprints
++            app.register_blueprint(main)
++            app.register_blueprint(Auth().blueprint)
+ 
+-    return app
++        return app
++
+:can not find the starting line of the diff
+
+In Hunk:@@ -1,367 +1,367 @@
+-import pandas as pd
+-import plotly.express as pex
+-import matplotlib.pyplot as plt
+-from openpyxl import load_workbook
+-from datetime import datetime
+-from matplotlib.pyplot import cm
+-import numpy as np
+-import os
+-from io import BytesIO
+-import logging
+-import textwrap
+-import json
+-import matplotlib.patches as mpatches
++from datetime import datetime
++from io import BytesIO
++import logging
++import matplotlib.patches as mpatches
++import matplotlib.pyplot as plt
++from matplotlib.pyplot import cm
++import numpy as np
++import pandas as pd
++import textwrap
+ 
+-from flask import Flask, request, jsonify, current_app
++class GanttChartGenerator:
++    """Class to handle the logic for generating Gantt charts."""
+ 
+ 
+-def wrap_text(text, width=20):
+-    """Wraps the text to a specified width."""
+-    return "\n".join(textwrap.wrap(text, width=width))
++    @staticmethod
++    def wrap_text(text, width=20):
++        """Wraps the text to a specified width."""
++        return "\n".join(textwrap.wrap(text, width=width))
+ 
+-def generate_gantt_chart(jira_json):
+-    projects_df = pd.DataFrame.from_dict(jira_json["data"], orient="index")
+-    with pd.option_context("display.max_columns", None):
+-        print(projects_df)
++    def generate_gantt_chart(self, jira_json):
++        projects_df = pd.DataFrame.from_dict(jira_json["data"], orient="index")
++        with pd.option_context("display.max_columns", None):
++            print(projects_df)
+ 
+-    # print(projects_df)
+-    # projects_df = jira_json.copy(0)
+-    # projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("float")
+-    # projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("Int64")
++        projects_df = projects_df.reset_index()
++        if projects_df.loc[0, "Parent Project"] != "":
++            projects_df["level_of_effort"] = 1
+ 
+-    projects_df = projects_df.reset_index()
+-    if projects_df.loc[0, "Parent Project"] != "":
+-        projects_df["level_of_effort"] = 1
++        elif (
++            projects_df["level_of_effort"].isnull().all()
++            and projects_df["Parent Project"].isnull().all()
++        ):
++            projects_df["level_of_effort"] = 2
+ 
+-    elif (
+-        projects_df["level_of_effort"].isnull().all()
+-        and projects_df["Parent Project"].isnull().all()
+-    ):
+-        projects_df["level_of_effort"] = 2
++        projects_df["level_of_effort"] = projects_df["level_of_effort"].astype("Int64")
++        projects_df["stack"] = 0
++        projects_df = projects_df.sort_values(["Start date", "Due date", "level_of_effort"])
++        projects_df = projects_df.rename(
++            columns={"Start date": "start_date", "Due date": "end_date"}
++        )
++        pd.set_option("display.max_columns", None)
++        pd.options.display.max_colwidth = 200
+ 
+-    projects_df["level_of_effort"] = projects_df["level_of_effort"].astype("Int64")
+-    projects_df["stack"] = 0
+-    # print(projects_df)
+-    projects_df = projects_df.sort_values(["Start date", "Due date", "level_of_effort"])
+-    projects_df = projects_df.rename(
+-        columns={"Start date": "start_date", "Due date": "end_date"}
+-    )
+-    pd.set_option("display.max_columns", None)
+-    pd.options.display.max_colwidth = 200
++        projects_df = projects_df.dropna(subset=["start_date", "end_date"])
++        projects_df["start_date"] = projects_df["start_date"].apply(
++            lambda x: x.replace(" 00:00:00", "")
++        )
++        projects_df["end_date"] = projects_df["end_date"].apply(
++            lambda x: x.replace(" 00:00:00", "")
++        )
+ 
+-    projects_df = projects_df.dropna(subset=["start_date", "end_date"])
+-    projects_df["start_date"] = projects_df["start_date"].apply(
+-        lambda x: x.replace(" 00:00:00", "")
+-    )
+-    projects_df["end_date"] = projects_df["end_date"].apply(
+-        lambda x: x.replace(" 00:00:00", "")
+-    )
++        min_start_date = (
++            projects_df["start_date"]
++            .apply(lambda x: datetime.strptime(x, "%Y-%m-%d"))
++            .min()
++        )
+ 
+-    min_start_date = (
+-        projects_df["start_date"]
+-        .apply(lambda x: datetime.strptime(x, "%Y-%m-%d"))
+-        .min()
+-    )
++        max_end_date = (
++            projects_df["end_date"].apply(lambda x: datetime.strptime(x, "%Y-%m-%d")).max()
++        )
+ 
+-    max_end_date = (
+-        projects_df["end_date"].apply(lambda x: datetime.strptime(x, "%Y-%m-%d")).max()
+-    )
++        delta = max_end_date - min_start_date
++        length_of_matrix = delta
+ 
+-    delta = max_end_date - min_start_date
+-    length_of_matrix = delta
++        delta = int(delta.total_seconds() / 60 / 60 / 24)
++        height_of_matrix = int(projects_df["level_of_effort"].sum())
++        if height_of_matrix < 7:
++            height_of_matrix = 7
++        rows, cols = (delta, height_of_matrix)
++        arr = [[0] * cols] * rows
+ 
+-    delta = int(delta.total_seconds() / 60 / 60 / 24)
+-    height_of_matrix = int(projects_df["level_of_effort"].sum())
+-    if height_of_matrix < 7:
+-        height_of_matrix = 7
+-    rows, cols = (delta, height_of_matrix)
+-    arr = [[0] * cols] * rows
++        date_range = pd.date_range(min_start_date, max_end_date)
+ 
+-    date_range = pd.date_range(min_start_date, max_end_date)
++        range_list = list(reversed(list(range(0, height_of_matrix))))
+ 
+-    range_list = list(reversed(list(range(0, height_of_matrix))))
++        for z in range(0, len(range_list)):
++            range_list[z] = str(range_list[z])
+ 
+-    for z in range(0, len(range_list)):
+-        range_list[z] = str(range_list[z])
++        projects_df = projects_df.sort_values(
++            ["start_date", "end_date", "level_of_effort"],
++            ascending=[True, False, True],  # Specify the sorting order for each column
++        )
++        master_plotting_df = pd.DataFrame(
++            data=np.zeros((height_of_matrix, len(date_range)), dtype=int),
++            index=range(height_of_matrix),
++            columns=date_range,
++        )
+ 
+-    projects_df = projects_df.sort_values(
+-        ["start_date", "end_date", "level_of_effort"],
+-        ascending=[True, False, True],  # Specify the sorting order for each column
+-    )
+-    master_plotting_df = pd.DataFrame(
+-        data=np.zeros((height_of_matrix, len(date_range)), dtype=int),
+-        index=range(height_of_matrix),
+-        columns=date_range,
+-    )
++        master_plotting_df = master_plotting_df.applymap(lambda x: 0)
+ 
+-    master_plotting_df = master_plotting_df.applymap(lambda x: 0)
++        project_plotting_df = master_plotting_df.copy()
+ 
+-    project_plotting_df = master_plotting_df.copy()
++        # Assign stack levels avoiding overlap
++        for i, row in projects_df.iterrows():
++            start = row["start_date"]
++            end = row["end_date"]
++            effort = int(row["level_of_effort"])
++            date_slice = pd.date_range(start, end)
+ 
+-    # Assign stack levels avoiding overlap
+-    for i, row in projects_df.iterrows():
+-        start = row["start_date"]
+-        end = row["end_date"]
+-        effort = int(row["level_of_effort"])
+-        date_slice = pd.date_range(start, end)
++            for y in range(height_of_matrix - effort + 1):
++                row_slice = list(range(y, y + effort))  # keep as integers to match index
++                try:
++                    slice_df = master_plotting_df.loc[row_slice, date_slice]
++                except KeyError as e:
++                    logging.error(f"KeyError accessing plotting matrix at row {y}: {e}")
++                    continue
+ 
+-        for y in range(height_of_matrix - effort + 1):
+-            row_slice = list(range(y, y + effort))  # keep as integers to match index
+-            try:
+-                slice_df = master_plotting_df.loc[row_slice, date_slice]
+-            except KeyError as e:
+-                logging.error(f"KeyError accessing plotting matrix at row {y}: {e}")
+-                continue
++                if (slice_df != 0).any().any():
++                    continue  # overlap, try next level
++                else:
++                    # No conflict – assign and mark
++                    projects_df.at[i, "stack"] = y
++                    master_plotting_df.loc[row_slice, date_slice] = 1
++                    break
+ 
+-            if (slice_df != 0).any().any():
+-                continue  # overlap, try next level
+-            else:
+-                # No conflict – assign and mark
+-                projects_df.at[i, "stack"] = y
+-                master_plotting_df.loc[row_slice, date_slice] = 1
+-                break
++        new_max_height_df = projects_df.copy()
++        new_max_height = projects_df["stack"].max()
++        new_max_height_df = projects_df[projects_df["stack"] == new_max_height]
++        new_max_height_plus_level_of_effort = (
++            int(new_max_height_df["level_of_effort"].max()) + new_max_height
++        )
+ 
+-    new_max_height_df = projects_df.copy()
+-    new_max_height = projects_df["stack"].max()
+-    new_max_height_df = projects_df[projects_df["stack"] == new_max_height]
+-    new_max_height_plus_level_of_effort = (
+-        int(new_max_height_df["level_of_effort"].max()) + new_max_height
+-    )
++        df = projects_df.copy()
++        df = df.reset_index()
++        if df.loc[0, "Parent Project"] != "":
++            unique_parents = df["Parent Project"].unique()
++            parent_color_map = {
++                parent: cm.rainbow(i / len(unique_parents))
++                for i, parent in enumerate(unique_parents)
++            }
++            fig, gnt = plt.subplots(figsize=(12, 6))
+ 
+-    df = projects_df.copy()
+-    df = df.reset_index()
+-    if df.loc[0, "Parent Project"] != "":
+-        unique_parents = df["Parent Project"].unique()
+-        parent_color_map = {
+-            parent: cm.rainbow(i / len(unique_parents))
+-            for i, parent in enumerate(unique_parents)
+-        }
+-        fig, gnt = plt.subplots(figsize=(12, 6))
++            for l in range(0, len(df)):
++                start = datetime.strptime(df.loc[l, "start_date"], "%Y-%m-%d")
++                finish = datetime.strptime(df.loc[l, "end_date"], "%Y-%m-%d")
++                status = df.loc[l, "Status"]
++                parent_project = df.loc[l, "Parent Project"]
++                parent_color = parent_color_map[parent_project]
+ 
+-        # array = np.linspace(0, 1, len(df))
+-        # np.random.shuffle(array)
++                if status == "Completed":
++                    color_value = parent_color
++                    edgecolor = parent_color
++                    hatch = ""
++                elif status == "In Progress":
++                    color_value = "white"
++                    edgecolor = parent_color
++                    hatch = "--"
+ 
+-        # color = iter(cm.rainbow(array))
++                elif status == "Not Started":
++                    color_value = "white"
++                    edgecolor = parent_color
++                    hatch = ""
++                else:
++                    color_value = "black"
++                    edgecolor = "black"
++                    hatch = "--"
++                # Use the wrap_text function to wrap the Title field for the label
++                gnt.broken_barh(
++                    [
++                        (
++                            pd.to_datetime(start),
++                            pd.to_datetime(finish) - pd.to_datetime(start),
++                        )
++                    ],
++                    [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
++                    color=color_value,
++                    edgecolor=edgecolor,
++                    hatch=hatch,
++                    linewidth=3,
++                    label=self.wrap_text(df.loc[l, "Title"]),
++                )
+ 
+-        # df = df.reset_index()
++                data = [
++                    (pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))
++                ]
+ 
+-        for l in range(0, len(df)):
+-            start = datetime.strptime(df.loc[l, "start_date"], "%Y-%m-%d")
+-            finish = datetime.strptime(df.loc[l, "end_date"], "%Y-%m-%d")
+-            status = df.loc[l, "Status"]
+-            parent_project = df.loc[l, "Parent Project"]
+-            parent_color = parent_color_map[parent_project]
++                title_number_map = {
++                    title: str(i + 1) for i, title in enumerate(df["Title"].unique())
++                }
++                title_number = title_number_map[df.loc[l, "Title"]]
++                for x1, x2 in data:
++                    gnt.text(
++                        x=x1 + x2 / 2,
++                        y=(int(df.loc[l, "stack"]) + int(df.loc[l, "level_of_effort"]))
++                        - int(df.loc[l, "level_of_effort"]) / 2,
++                        s=title_number,
++                        ha="center",
++                        va="center",
++                        color="blue",
++                        fontsize=6,
++                    )
++            gnt.set_xlabel("Date")
++            gnt.set_ylabel(
++                "Rough Average Hours per Day\nEffort Level: Low=2, Medium=4, High= 6, Average for Project.  Most projects of any length are Low=2"
++            )
+ 
+-            if status == "Completed":
+-                color_value = parent_color
+-                edgecolor = parent_color
+-                hatch = ""
+-            elif status == "In Progress":
+-                color_value = "white"
+-                edgecolor = parent_color
+-                hatch = "--"
++            parent_legend_handles = [
++                mpatches.Patch(color=color, label=self.wrap_text(parent, width=25))
++                for parent, color in parent_color_map.items()
++            ]
++            parent_legend_handles = [
++                mpatches.Patch(color=color, label=self.wrap_text(parent, width=25))
++                for parent, color in parent_color_map.items()
++            ]
++            legend2 = gnt.legend(
++                handles=parent_legend_handles,
++                loc="lower left",
++                bbox_to_anchor=(0.0, 0.0),
++                title="Parent Projects",
++                prop={"size": 6},
++            )
++            gnt.add_artist(legend2)
+ 
+-            elif status == "Not Started":
+-                color_value = "white"
+-                edgecolor = parent_color
+-                hatch = ""
+-            else:
+-                color_value = "black"
+-                edgecolor = "black"
+-                hatch = "--"
+-            # Use the wrap_text function to wrap the Title field for the label
+-            gnt.broken_barh(
+-                [
+-                    (
+-                        pd.to_datetime(start),
+-                        pd.to_datetime(finish) - pd.to_datetime(start),
+-                    )
+-                ],
+-                [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+-                color=color_value,
+-                edgecolor=edgecolor,
+-                hatch=hatch,
+-                linewidth=3,
+-                label=wrap_text(df.loc[l, "Title"]),
+-            )
+-            # gnt.broken_barh(
+-            #     [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
+-            #     [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+-            #     color=next(color),
+-            #     label=df.loc[l, "Title"],
+-            # )
++            # Title-number legend
++            title_legend_handles = [
++                mpatches.Patch(color="white", label=f"{num}: {self.wrap_text(title, width=40)}")
++                for title, num in title_number_map.items()
++            ]
++            legend1 = gnt.legend(
++                handles=title_legend_handles,
++                loc="upper left",
++                bbox_to_anchor=(1.02, 1.0),
++                title="Project Titles",
++                frameon=False,
++                prop={"size": 6},
++            )
++            gnt.add_artist(legend1)
++            # Shrink axis tick and label font sizes
++            gnt.tick_params(axis="both", which="major", labelsize=6)
++            gnt.xaxis.label.set_size(6)
++            gnt.yaxis.label.set_size(6)
++            # top_value_benchmark = 0.710 / 10
++            # top_value = top_value_benchmark * new_max_height_plus_level_of_effort
+ 
+-            data = [
+-                (pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))
+-            ]
++            plt.subplots_adjust(left=0.1, right=0.85, bottom=0.15, top=0.9)
++            # plt.xticks(rotation=45)
++            # plt.show(block=True)
++            # Generate the plot
++            img = BytesIO()
++            plt.savefig(img, format="png", dpi=100)
+ 
+-            title_number_map = {
+-                title: str(i + 1) for i, title in enumerate(df["Title"].unique())
+-            }
+-            title_number = title_number_map[df.loc[l, "Title"]]
+-            for x1, x2 in data:
+-                gnt.text(
+-                    x=x1 + x2 / 2,
+-                    y=(int(df.loc[l, "stack"]) + int(df.loc[l, "level_of_effort"]))
+-                    - int(df.loc[l, "level_of_effort"]) / 2,
+-                    s=title_number,
+-                    ha="center",
+-                    va="center",
+-                    color="blue",
+-                    fontsize=6,
+-                )
+-        gnt.set_xlabel("Date")
+-        gnt.set_ylabel(
+-            "Rough Average Hours per Day\nEffort Level: Low=2, Medium=4, High= 6, Average for Project.  Most projects of any length are Low=2"
+-        )
++            img.seek(0)
+ 
+-        parent_legend_handles = [
+-            mpatches.Patch(color=color, label=wrap_text(parent, width=25))
+-            for parent, color in parent_color_map.items()
+-        ]
+-        parent_legend_handles = [
+-            mpatches.Patch(color=color, label=wrap_text(parent, width=25))
+-            for parent, color in parent_color_map.items()
+-        ]
+-        legend2 = gnt.legend(
+-            handles=parent_legend_handles,
+-            loc="lower left",
+-            bbox_to_anchor=(0.0, 0.0),
+-            title="Parent Projects",
+-            prop={"size": 6},
+-        )
+-        gnt.add_artist(legend2)
++            return img
+ 
+-        # Title-number legend
+-        title_legend_handles = [
+-            mpatches.Patch(color="white", label=f"{num}: {wrap_text(title, width=40)}")
+-            for title, num in title_number_map.items()
+-        ]
+-        legend1 = gnt.legend(
+-            handles=title_legend_handles,
+-            loc="upper left",
+-            bbox_to_anchor=(1.02, 1.0),
+-            title="Project Titles",
+-            frameon=False,
+-            prop={"size": 6},
+-        )
+-        gnt.add_artist(legend1)
+-        # Shrink axis tick and label font sizes
+-        gnt.tick_params(axis="both", which="major", labelsize=6)
+-        gnt.xaxis.label.set_size(6)
+-        gnt.yaxis.label.set_size(6)
+-        # top_value_benchmark = 0.710 / 10
+-        # top_value = top_value_benchmark * new_max_height_plus_level_of_effort
++        else:
++            fig, gnt = plt.subplots(figsize=(12, 6))  # half the height
+ 
+-        plt.subplots_adjust(left=0.1, right=0.85, bottom=0.15, top=0.9)
+-        # plt.xticks(rotation=45)
+-        # plt.show(block=True)
+-        # Generate the plot
+-        img = BytesIO()
+-        plt.savefig(img, format="png", dpi=100)
++            array = np.linspace(0, 1, len(df))
++            np.random.shuffle(array)
+ 
+-        img.seek(0)
++            color = iter(cm.rainbow(array))
+ 
+-        # (img, flush=True)
+-        return img
++            for l in range(0, len(df)):
++                start = datetime.strptime(df.loc[l, "start_date"], "%Y-%m-%d")
++                finish = datetime.strptime(df.loc[l, "end_date"], "%Y-%m-%d")
++                status = df.loc[l, "Status"]
++                parent_project = df.loc[l, "Parent Project"]
++                next_color = next(color)
+ 
+-    else:
+-        fig, gnt = plt.subplots(figsize=(12, 6))  # half the height
++                if status == "Completed":
++                    color_value = next_color
++                    edgecolor = next_color
++                    hatch = ""
++                elif status == "In Progress":
++                    color_value = "white"
++                    edgecolor = next_color
++                    hatch = "--"
+ 
+-        array = np.linspace(0, 1, len(df))
+-        np.random.shuffle(array)
++                elif status == "Not Started":
++                    color_value = "white"
++                    edgecolor = next_color
++                    hatch = ""
++                else:
++                    color_value = "black"
++                    edgecolor = "black"
++                    hatch = "--"
++                # Use the wrap_text function to wrap the Title field for the label
++                gnt.broken_barh(
++                    [
++                        (
++                            pd.to_datetime(start),
++                            pd.to_datetime(finish) - pd.to_datetime(start),
++                        )
++                    ],
++                    [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
++                    color=color_value,
++                    edgecolor=edgecolor,
++                    hatch=hatch,
++                    linewidth=3,
++                    label=self.wrap_text(df.loc[l, "Title"]),
++                )
+ 
+-        color = iter(cm.rainbow(array))
++                data = [
++                    (pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))
++                ]
+ 
+-        # df = df.reset_index()
++                for x1, x2 in data:
++                    gnt.text(
++                        x=x1 + x2 / 2,
++                        y=(int(df.loc[l, "stack"]) + int(df.loc[l, "level_of_effort"]))
++                        - int(df.loc[l, "level_of_effort"]) / 2,
++                        s=self.wrap_text(df.loc[l, "Title"]),
++                        ha="center",
++                        va="center",
++                        color="blue",
++                        fontsize=6,
++                    )
++            gnt.set_xlabel("Date")
++            gnt.set_ylabel(
++                "Rough Average Hours per Day\nEffort Level: Low=2, Medium=4, High= 6, Average for Project.  Most projects of any length are Low=2"
++            )
+ 
+-        for l in range(0, len(df)):
+-            start = datetime.strptime(df.loc[l, "start_date"], "%Y-%m-%d")
+-            finish = datetime.strptime(df.loc[l, "end_date"], "%Y-%m-%d")
+-            status = df.loc[l, "Status"]
+-            parent_project = df.loc[l, "Parent Project"]
+-            next_color = next(color)
++            plt.subplots_adjust(left=0.1, right=0.9, bottom=0.2, top=0.9)
++            # plt.xticks(rotation=45)
++            # plt.show(block=True)
++            # Generate the plot
++            img = BytesIO()
++            plt.savefig(img, format="png", dpi=100)
+ 
+-            if status == "Completed":
+-                color_value = next_color
+-                edgecolor = next_color
+-                hatch = ""
+-            elif status == "In Progress":
+-                color_value = "white"
+-                edgecolor = next_color
+-                hatch = "--"
++            img.seek(0)
+ 
+-            elif status == "Not Started":
+-                color_value = "white"
+-                edgecolor = next_color
+-                hatch = ""
+-            else:
+-                color_value = "black"
+-                edgecolor = "black"
+-                hatch = "--"
+-            # Use the wrap_text function to wrap the Title field for the label
+-            gnt.broken_barh(
+-                [
+-                    (
+-                        pd.to_datetime(start),
+-                        pd.to_datetime(finish) - pd.to_datetime(start),
+-                    )
+-                ],
+-                [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+-                color=color_value,
+-                edgecolor=edgecolor,
+-                hatch=hatch,
+-                linewidth=3,
+-                label=wrap_text(df.loc[l, "Title"]),
+-            )
+-            # gnt.broken_barh(
+-            #     [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
+-            #     [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+-            #     color=next(color),
+-            #     label=df.loc[l, "Title"],
+-            # )
++            return img
+ 
+-            data = [
+-                (pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))
+-            ]
++--- app/jira_api.py
+, there was at least one mismatch.
+
+In Hunk:@@ -15,192 +1,192 @@
+-from flask import Flask, request, jsonify, current_app
+-import re
+-import pandas as pd
+-import numpy as np
+-from dotenv import load_dotenv
+-import os
+-import urllib
++import os
++import requests
++import pandas as pd
++from flask import jsonify
++from dotenv import load_dotenv
+ 
+ 
+-def fetch_API(label, assignee, level):
+-    url = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'%20AND%20type='Initiative'%20AND%20labels={label}%20AND%20assignee%20IN%20%28%22{assignee}%22%29"
+-    JIRA_URL = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'"
++class JiraAPI:
++    """Class to manage interactions with the JIRA API."""
+ 
+-    BEARER_ACCESS_TOKEN = os.environ.get("BEARER_ACCESS_TOKEN")
++    def __init__(self):
++        load_dotenv()
++        self.BEARER_ACCESS_TOKEN = os.environ.get("BEARER_ACCESS_TOKEN")
+ 
+-    end = "&maxResults=100"
++    def fetch_API(self, label, assignee, level):
++        url = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'%20AND%20type='Initiative'%20AND%20labels={label}%20AND%20assignee%20IN%20%28%22{assignee}%22%29"
++        JIRA_URL = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'"
+ 
+-    # Retrieve the environment variable and set it to the variable `bearer_access_token`
+-    bearer_access_token = BEARER_ACCESS_TOKEN
++        end = "&maxResults=100"
+ 
+-    # Check if the environment variable is missing
+-    if not bearer_access_token:
+-        raise ValueError("Environment variable 'BEARER_ACCESS_TOKEN' is not set.")
++        # Retrieve the environment variable and set it to the variable `bearer_access_token`
++        bearer_access_token = self.BEARER_ACCESS_TOKEN
+ 
+-    headers = {
+-        "Content": "application/json",
+-        "Authorization": "Basic " + bearer_access_token,
+-    }
++        # Check if the environment variable is missing
++        if not bearer_access_token:
++            raise ValueError("Environment variable 'BEARER_ACCESS_TOKEN' is not set.")
+ 
+-    print(url + "&maxResults=100")
+-    # Make the GET request with encoded parameters
+-    response = requests.get(url + "&maxResults=100", headers=headers)
++        headers = {
++            "Content": "application/json",
++            "Authorization": "Basic " + bearer_access_token,
++        }
+ 
+-    if response.status_code in [200, 201, 202, 203, 204]:
+-        # Create DataFrame with additional column for Assignee
+-        df = pd.DataFrame(
+-            columns=[
+-                "Title",
+-                "level_of_effort",
+-                "Start date",
+-                "Due date",
+-                "Assignee",
+-                "Status",
+-                "Parent Project",
+-            ]
+-        )
+-        issues = response.json()["issues"]
+-        rows = []
++        print(url + "&maxResults=100")
++        # Make the GET request with encoded parameters
++        response = requests.get(url + "&maxResults=100", headers=headers)
+ 
+-        for issue in issues:
+-            status = issue["fields"]["status"]["name"]
+-            title = issue["fields"]["summary"]
+-            key = issue["key"]
++        if response.status_code in [200, 201, 202, 203, 204]:
++            # Create DataFrame with additional column for Assignee
++            df = pd.DataFrame(
++                columns=[
++                    "Title",
++                    "level_of_effort",
++                    "Start date",
++                    "Due date",
++                    "Assignee",
++                    "Status",
++                    "Parent Project",
++                ]
++            )
++            issues = response.json()["issues"]
++            rows = []
+ 
+-            try:
+-                level_of_effort = (
+-                    issue["fields"].get("customfield_10338", {}).get("value", None)
+-                )
++            for issue in issues:
++                status = issue["fields"]["status"]["name"]
++                title = issue["fields"]["summary"]
++                key = issue["key"]
+ 
+-                print(level_of_effort)
++                try:
++                    level_of_effort = (
++                        issue["fields"].get("customfield_10338", {}).get("value", None)
++                    )
+ 
+-                if level_of_effort == "Low":
+-                    level_of_effort = 1
++                    print(level_of_effort)
+ 
+-                elif level_of_effort == "Medium":
+-                    level_of_effort = 2
++                    if level_of_effort == "Low":
++                        level_of_effort = 1
+ 
+-                elif level_of_effort == "High":
+-                    level_of_effort = 3
+-                else:
+-                    level_of_effort = 1
++                    elif level_of_effort == "Medium":
++                        level_of_effort = 2
+ 
+-            except:
+-                level_of_effort = 2
+-            start_date = issue["fields"].get("customfield_10022", None)
+-            due_date = issue["fields"].get("customfield_10023", None)
++                    elif level_of_effort == "High":
++                        level_of_effort = 3
++                    else:
++                        level_of_effort = 1
+ 
+-            if start_date == None:
+-                start_date = issue["fields"].get("customfield_10015", None)
++                except:
++                    level_of_effort = 2
++                start_date = issue["fields"].get("customfield_10022", None)
++                due_date = issue["fields"].get("customfield_10023", None)
+ 
+-            if due_date == None:
+-                due_date = issue["fields"].get("duedate", None)
++                if start_date == None:
++                    start_date = issue["fields"].get("customfield_10015", None)
+ 
+-            # Get the assignee's display name if present
+-            assignee = (
+-                issue["fields"].get("assignee", {}).get("displayName", "Unassigned")
+-            )
++                if due_date == None:
++                    due_date = issue["fields"].get("duedate", None)
+ 
+-            if level == "subtasks":
+-                project_title = title
+-                child_issues = []
++                # Get the assignee's display name if present
++                assignee = (
++                    issue["fields"].get("assignee", {}).get("displayName", "Unassigned")
++                )
+ 
+-                # Use "issueLinkType" if there's a link relationship
+-                child_query = f'parent = "{key}"'
++                if level == "subtasks":
++                    project_title = title
++                    child_issues = []
+ 
+-                # Alternative: If Initiatives are parents in JIRA
+-                # child_query = f'parent={key}'
++                    # Use "issueLinkType" if there's a link relationship
++                    child_query = f'parent = "{key}"'
+ 
+-                child_response = requests.get(
+-                    f"{JIRA_URL}%20AND%20{child_query}&maxResults=100",
+-                    headers=headers,
+-                ).json()
++                    # Alternative: If Initiatives are parents in JIRA
++                    # child_query = f'parent={key}'
+ 
+-                # print(child_response)
+-                for child_issue in child_response.get("issues", []):
+-                    child_issues.append(child_issue)
++                    child_response = requests.get(
++                        f"{JIRA_URL}%20AND%20{child_query}&maxResults=100",
++                        headers=headers,
++                    ).json()
+ 
+-                # print(child_issues)
+-                # Print Child Issues
+-                for child_issue in child_issues:
+-                    # empty out values from outer scope
+-                    title = ""
+-                    status = ""
+-                    level_of_effort = ""
+-                    start_date = ""
+-                    due_date = ""
++                    for child_issue in child_response.get("issues", []):
++                        child_issues.append(child_issue)
+ 
+-                    title = child_issue["fields"]["summary"]
+-                    status = child_issue["fields"]["status"]["name"]
++                    for child_issue in child_issues:
++                        # empty out values from outer scope
++                        title = ""
++                        status = ""
++                        level_of_effort = ""
++                        start_date = ""
++                        due_date = ""
+ 
+-                    try:
+-                        level_of_effort = (
+-                            child_issue["fields"]
+-                            .get("customfield_10338", {})
+-                            .get("value", None)
+-                        )
++                        title = child_issue["fields"]["summary"]
++                        status = child_issue["fields"]["status"]["name"]
+ 
+-                        if level_of_effort == "Low":
+-                            level_of_effort = 1
++                        try:
++                            level_of_effort = (
++                                child_issue["fields"]
++                                .get("customfield_10338", {})
++                                .get("value", None)
++                            )
+ 
+-                        elif level_of_effort == "Medium":
+-                            level_of_effort = 2
++                            if level_of_effort == "Low":
++                                level_of_effort = 1
+ 
+-                        elif level_of_effort == "High":
+-                            level_of_effort = 3
+-                        else:
+-                            level_of_effort = 1
++                            elif level_of_effort == "Medium":
++                                level_of_effort = 2
+ 
+-                    except:
+-                        level_of_effort = 2
++                            elif level_of_effort == "High":
++                                level_of_effort = 3
++                            else:
++                                level_of_effort = 1
+ 
+-                    start_date = child_issue["fields"].get("customfield_10022", None)
+-                    due_date = child_issue["fields"].get("customfield_10023", None)
++                        except:
++                            level_of_effort = 2
+ 
+-                    if start_date == None:
+-                        start_date = child_issue["fields"].get(
+-                            "customfield_10015", None
+-                        )
++                        start_date = child_issue["fields"].get("customfield_10022", None)
++                        due_date = child_issue["fields"].get("customfield_10023", None)
+ 
+-                    if due_date == None:
+-                        due_date = child_issue["fields"].get("duedate", None)
++                        if start_date == None:
++                            start_date = child_issue["fields"].get(
++                                "customfield_10015", None
++                            )
+ 
+-                        # Append the row with the new Assignee column
+-                    rows.append(
+-                        [
+-                            title,
+-                            level_of_effort,
+-                            start_date,
+-                            due_date,
+-                            assignee,
+-                            status,
+-                            project_title,
+-                        ]
+-                    )
++                        if due_date == None:
++                            due_date = child_issue["fields"].get("duedate", None)
+ 
+-            else:
+-                rows.append(
+-                    [title, level_of_effort, start_date, due_date, assignee, status, ""]
+-                )
++                            # Append the row with the new Assignee column
++                        rows.append(
++                            [
++                                title,
++                                level_of_effort,
++                                start_date,
++                                due_date,
++                                assignee,
++                                status,
++                                project_title,
++                            ]
++                        )
+ 
+-        # Create DataFrame
+-        df = pd.DataFrame(
+-            rows,
+-            columns=[
+-                "Title",
+-                "level_of_effort",
+-                "Start date",
+-                "Due date",
+-                "Assignee",
+-                "Status",
+-                "Parent Project",
+-            ],
+-        )
++                else:
++                    rows.append(
++                        [title, level_of_effort, start_date, due_date, assignee, status, ""]
++                    )
+ 
+-        # print(df)
+-        return jsonify({"status": "success", "data": df.to_dict(orient="index")})
++            # Create DataFrame
++            df = pd.DataFrame(
++                rows,
++                columns=[
++                    "Title",
++                    "level_of_effort",
++                    "Start date",
++                    "Due date",
++                    "Assignee",
++                    "Status",
++                    "Parent Project",
++                ],
++            )
+ 
+-    else:
+-        return jsonify({"message": "JIRA lookup failure.  Check label exists"}), 400
++            return jsonify({"status": "success", "data": df.to_dict(orient="index")})
++
++        else:
++            return jsonify({"message": "JIRA lookup failure.  Check label exists"}), 400
++
+, there was at least one mismatch.
+
+2025-08-09T00:26:10.267418
+
+
+2025-08-09T00:28:52.017300
+In Hunk:@@ -6,6 +7,7 @@
+ import numpy as np
+ from dotenv import load_dotenv
+ import os
++
+ import urllib
+ 
+ 
+ def fetch_API(label, assignee, level):
+     url = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'%20AND%20type='Initiative'%20AND%20labels={label}%20AND%20assignee%20IN%20%28%22{assignee}%22%29"
+     JIRA_URL = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'"
+ 
+     BEARER_ACCESS_TOKEN = os.environ.get("BEARER_ACCESS_TOKEN")
+ 
+     end = "&maxResults=100"
+ 
+     # Retrieve the environment variable and set it to the variable `bearer_access_token`
+     bearer_access_token = BEARER_ACCESS_TOKEN
+ 
+     # Check if the environment variable is missing
+     if not bearer_access_token:
+         raise ValueError("Environment variable 'BEARER_ACCESS_TOKEN' is not set.")
+ 
+     headers = {
+         "Content": "application/json",
+         "Authorization": "Basic " + bearer_access_token,
+     }
+ 
+     print(url + "&maxResults=100")
+     # Make the GET request with encoded parameters
+     response = requests.get(url + "&maxResults=100", headers=headers)
+ 
+     if response.status_code in [200, 201, 202, 203, 204]:
+         # Create DataFrame with additional column for Assignee
+         df = pd.DataFrame(
+             columns=[
+                 "Title",
+                 "level_of_effort",
+                 "Start date",
+                 "Due date",
+                 "Assignee",
+                 "Status",
+                 "Parent Project",
+             ]
+         )
+         issues = response.json()["issues"]
+         rows = []
+ 
+         for issue in issues:
+             status = issue["fields"]["status"]["name"]
+             title = issue["fields"]["summary"]
+             key = issue["key"]
+ 
+             try:
+                 level_of_effort = (
+                     issue["fields"].get("customfield_10338", {}).get("value", None)
+                 )
+ 
+                 print(level_of_effort)
+ 
+                 if level_of_effort == "Low":
+                     level_of_effort = 1
+ 
+                 elif level_of_effort == "Medium":
+                     level_of_effort = 2
+ 
+                 elif level_of_effort == "High":
+                     level_of_effort = 3
+                 else:
+                     level_of_effort = 1
+ 
+             except:
+                 level_of_effort = 2
+             start_date = issue["fields"].get("customfield_10022", None)
+             due_date = issue["fields"].get("customfield_10023", None)
+ 
+             if start_date == None:
+                 start_date = issue["fields"].get("customfield_10015", None)
+ 
+             if due_date == None:
+                 due_date = issue["fields"].get("duedate", None)
+ 
+             # Get the assignee's display name if present
+             assignee = (
+                 issue["fields"].get("assignee", {}).get("displayName", "Unassigned")
+             )
+ 
+             if level == "subtasks":
+                 project_title = title
+                 child_issues = []
+ 
+                 # Use "issueLinkType" if there's a link relationship
+                 child_query = f'parent = "{key}"'
+ 
+                 # Alternative: If Initiatives are parents in JIRA
+                 # child_query = f'parent={key}'
+ 
+                 child_response = requests.get(
+                     f"{JIRA_URL}%20AND%20{child_query}&maxResults=100",
+                     headers=headers,
+                 ).json()
+ 
+                 # print(child_response)
+                 for child_issue in child_response.get("issues", []):
+                     child_issues.append(child_issue)
+ 
+                 # print(child_issues)
+                 # Print Child Issues
+                 for child_issue in child_issues:
+                     # empty out values from outer scope
+                     title = ""
+                     status = ""
+                     level_of_effort = ""
+                     start_date = ""
+                     due_date = ""
+ 
+                     title = child_issue["fields"]["summary"]
+                     status = child_issue["fields"]["status"]["name"]
+ 
+                     try:
+                         level_of_effort = (
+                             child_issue["fields"]
+                             .get("customfield_10338", {})
+                             .get("value", None)
+                         )
+ 
+                         if level_of_effort == "Low":
+                             level_of_effort = 1
+ 
+                         elif level_of_effort == "Medium":
+                             level_of_effort = 2
+ 
+                         elif level_of_effort == "High":
+                             level_of_effort = 3
+                         else:
+                             level_of_effort = 1
+ 
+                     except:
+                         level_of_effort = 2
+ 
+                     start_date = child_issue["fields"].get("customfield_10022", None)
+                     due_date = child_issue["fields"].get("customfield_10023", None)
+ 
+                     if start_date == None:
+                         start_date = child_issue["fields"].get(
+                             "customfield_10015", None
+                         )
+ 
+                     if due_date == None:
+                         due_date = child_issue["fields"].get("duedate", None)
+ 
+                         # Append the row with the new Assignee column
+                     rows.append(
+                         [
+                             title,
+                             level_of_effort,
+                             start_date,
+                             due_date,
+                             assignee,
+                             status,
+                             project_title,
+                         ]
+                     )
+ 
+             else:
+                 rows.append(
+                     [title, level_of_effort, start_date, due_date, assignee, status, ""]
+                 )
+ 
+         # Create DataFrame
+         df = pd.DataFrame(
+             rows,
+             columns=[
+                 "Title",
+                 "level_of_effort",
+                 "Start date",
+                 "Due date",
+                 "Assignee",
+                 "Status",
+                 "Parent Project",
+             ],
+         )
+ 
+         # print(df)
+         return jsonify({"status": "success", "data": df.to_dict(orient="index")})
+ load_dotenv()
+ 
+ def fetch_API(label, assignee, level):
+, there was at least one mismatch.
+
+2025-08-09T00:28:56.995196
+
+
+2025-08-09T00:33:15.125619
+
+
+2025-08-09T00:35:37.354986
+In Hunk:@@ -15,6 +17,8 @@
+ from flask import Flask, request, jsonify, current_app
+ 
+ 
++class ContinuousGantt:
++    """Class to generate Gantt charts."""
+ def wrap_text(text, width=20):
+     """Wraps the text to a specified width."""
+     return "\n".join(textwrap.wrap(text, width=width))
+ 
+ 
+ def generate_gantt_chart(jira_json):
+     projects_df = pd.DataFrame.from_dict(jira_json["data"], orient="index")
+     with pd.option_context("display.max_columns", None):
+         print(projects_df)
+ 
+     # print(projects_df)
+     # projects_df = jira_json.copy(0)
+     # projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("float")
+     # projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("Int64")
+ 
+     projects_df = projects_df.reset_index()
+     if projects_df.loc[0, "Parent Project"] != "":
+         projects_df["level_of_effort"] = 1
+ 
+     elif (
+         projects_df["level_of_effort"].isnull().all()
+         and projects_df["Parent Project"].isnull().all()
+     ):
+         projects_df["level_of_effort"] = 2
+ 
+     projects_df["level_of_effort"] = projects_df["level_of_effort"].astype("Int64")
+     projects_df["stack"] = 0
+     # print(projects_df)
+     projects_df = projects_df.sort_values(["Start date", "Due date", "level_of_effort"])
+     projects_df = projects_df.rename(
+         columns={"Start date": "start_date", "Due date": "end_date"}
+     )
+     pd.set_option("display.max_columns", None)
+     pd.options.display.max_colwidth = 200
+ 
+     projects_df = projects_df.dropna(subset=["start_date", "end_date"])
+     projects_df["start_date"] = projects_df["start_date"].apply(
+         lambda x: x.replace(" 00:00:00", "")
+     )
+     projects_df["end_date"] = projects_df["end_date"].apply(
+         lambda x: x.replace(" 00:00:00", "")
+     )
+ 
+     min_start_date = (
+         projects_df["start_date"]
+         .apply(lambda x: datetime.strptime(x, "%Y-%m-%d"))
+         .min()
+     )
+ 
+     max_end_date = (
+         projects_df["end_date"].apply(lambda x: datetime.strptime(x, "%Y-%m-%d")).max()
+     )
+ 
+     delta = max_end_date - min_start_date
+     length_of_matrix = delta
+ 
+     delta = int(delta.total_seconds() / 60 / 60 / 24)
+     height_of_matrix = int(projects_df["level_of_effort"].sum())
+     if height_of_matrix < 7:
+         height_of_matrix = 7
+     rows, cols = (delta, height_of_matrix)
+     arr = [[0] * cols] * rows
+ 
+     date_range = pd.date_range(min_start_date, max_end_date)
+ 
+     range_list = list(reversed(list(range(0, height_of_matrix))))
+ 
+     for z in range(0, len(range_list)):
+         range_list[z] = str(range_list[z])
+ 
+     projects_df = projects_df.sort_values(
+         ["start_date", "end_date", "level_of_effort"],
+         ascending=[True, False, True],  # Specify the sorting order for each column
+     )
+     master_plotting_df = pd.DataFrame(
+         data=np.zeros((height_of_matrix, len(date_range)), dtype=int),
+         index=range(height_of_matrix),
+         columns=date_range,
+     )
+ 
+     master_plotting_df = master_plotting_df.applymap(lambda x: 0)
+ 
+     project_plotting_df = master_plotting_df.copy()
+ 
+     # Assign stack levels avoiding overlap
+     for i, row in projects_df.iterrows():
+         start = row["start_date"]
+         end = row["end_date"]
+         effort = int(row["level_of_effort"])
+         date_slice = pd.date_range(start, end)
+ 
+         for y in range(height_of_matrix - effort + 1):
+             row_slice = list(range(y, y + effort))  # keep as integers to match index
+             try:
+                 slice_df = master_plotting_df.loc[row_slice, date_slice]
+             except KeyError as e:
+                 logging.error(f"KeyError accessing plotting matrix at row {y}: {e}")
+                 continue
+ 
+             if (slice_df != 0).any().any():
+                 continue  # overlap, try next level
+             else:
+                 # No conflict – assign and mark
+                 projects_df.at[i, "stack"] = y
+                 master_plotting_df.loc[row_slice, date_slice] = 1
+                 break
+ 
+     new_max_height_df = projects_df.copy()
+     new_max_height = projects_df["stack"].max()
+     new_max_height_df = projects_df[projects_df["stack"] == new_max_height]
+     new_max_height_plus_level_of_effort = (
+         int(new_max_height_df["level_of_effort"].max()) + new_max_height
+     )
+ 
+     df = projects_df.copy()
+     df = df.reset_index()
+     if df.loc[0, "Parent Project"] != "":
+         unique_parents = df["Parent Project"].unique()
+         parent_color_map = {
+             parent: cm.rainbow(i / len(unique_parents))
+             for i, parent in enumerate(unique_parents)
+         }
+         fig, gnt = plt.subplots(figsize=(12, 6))
+ 
+         # array = np.linspace(0, 1, len(df))
+         # np.random.shuffle(array)
+ 
+         # color = iter(cm.rainbow(array))
+ 
+         # df = df.reset_index()
+ 
+         for l in range(0, len(df)):
+             start = datetime.strptime(df.loc[l, "start_date"], "%Y-%m-%d")
+             finish = datetime.strptime(df.loc[l, "end_date"], "%Y-%m-%d")
+             status = df.loc[l, "Status"]
+             parent_project = df.loc[l, "Parent Project"]
+             parent_color = parent_color_map[parent_project]
+ 
+             if status == "Completed":
+                 color_value = parent_color
+                 edgecolor = parent_color
+                 hatch = ""
+             elif status == "In Progress":
+                 color_value = "white"
+                 edgecolor = parent_color
+                 hatch = "--"
+ 
+             elif status == "Not Started":
+                 color_value = "white"
+                 edgecolor = parent_color
+                 hatch = ""
+             else:
+                 color_value = "black"
+                 edgecolor = "black"
+                 hatch = "--"
+             # Use the wrap_text function to wrap the Title field for the label
+             gnt.broken_barh(
+                 [
+                     (
+                         pd.to_datetime(start),
+                         pd.to_datetime(finish) - pd.to_datetime(start),
+                     )
+                 ],
+                 [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+                 color=color_value,
+                 edgecolor=edgecolor,
+                 hatch=hatch,
+                 linewidth=3,
+                 label=wrap_text(df.loc[l, "Title"]),
+             )
+             # gnt.broken_barh(
+             #     [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
+             #     [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+             #     color=next(color),
+             #     label=df.loc[l, "Title"],
+             # )
+ 
+             data = [
+                 (pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))
+             ]
+ 
+             title_number_map = {
+                 title: str(i + 1) for i, title in enumerate(df["Title"].unique())
+             }
+             title_number = title_number_map[df.loc[l, "Title"]]
+             for x1, x2 in data:
+                 gnt.text(
+                     x=x1 + x2 / 2,
+                     y=(int(df.loc[l, "stack"]) + int(df.loc[l, "level_of_effort"]))
+                     - int(df.loc[l, "level_of_effort"]) / 2,
+                     s=title_number,
+                     ha="center",
+                     va="center",
+                     color="blue",
+                     fontsize=6,
+                 )
+         gnt.set_xlabel("Date")
+         gnt.set_ylabel(
+             "Rough Average Hours per Day\nEffort Level: Low=2, Medium=4, High= 6, Average for Project.  Most projects of any length are Low=2"
+         )
+ 
+         parent_legend_handles = [
+             mpatches.Patch(color=color, label=wrap_text(parent, width=25))
+             for parent, color in parent_color_map.items()
+         ]
+         parent_legend_handles = [
+             mpatches.Patch(color=color, label=wrap_text(parent, width=25))
+             for parent, color in parent_color_map.items()
+         ]
+         legend2 = gnt.legend(
+             handles=parent_legend_handles,
+             loc="lower left",
+             bbox_to_anchor=(0.0, 0.0),
+             title="Parent Projects",
+             prop={"size": 6},
+         )
+         gnt.add_artist(legend2)
+ 
+         # Title-number legend
+         title_legend_handles = [
+             mpatches.Patch(color="white", label=f"{num}: {wrap_text(title, width=40)}")
+             for title, num in title_number_map.items()
+         ]
+         legend1 = gnt.legend(
+             handles=title_legend_handles,
+             loc="upper left",
+             bbox_to_anchor=(1.02, 1.0),
+             title="Project Titles",
+             frameon=False,
+             prop={"size": 6},
+         )
+         gnt.add_artist(legend1)
+         # Shrink axis tick and label font sizes
+         gnt.tick_params(axis="both", which="major", labelsize=6)
+         gnt.xaxis.label.set_size(6)
+         gnt.yaxis.label.set_size(6)
+         # top_value_benchmark = 0.710 / 10
+         # top_value = top_value_benchmark * new_max_height_plus_level_of_effort
+ 
+         plt.subplots_adjust(left=0.1, right=0.85, bottom=0.15, top=0.9)
+         # plt.xticks(rotation=45)
+         # plt.show(block=True)
+         # Generate the plot
+         img = BytesIO()
+         plt.savefig(img, format="png", dpi=100)
+ 
+         img.seek(0)
+ 
+         # (img, flush=True)
+         return img
+ 
+     else:
+         fig, gnt = plt.subplots(figsize=(12, 6))  # half the height
+ 
+         array = np.linspace(0, 1, len(df))
+         np.random.shuffle(array)
+ 
+         color = iter(cm.rainbow(array))
+ 
+         # df = df.reset_index()
+ 
+         for l in range(0, len(df)):
+             start = datetime.strptime(df.loc[l, "start_date"], "%Y-%m-%d")
+             finish = datetime.strptime(df.loc[l, "end_date"], "%Y-%m-%d")
+             status = df.loc[l, "Status"]
+             parent_project = df.loc[l, "Parent Project"]
+             next_color = next(color)
+ 
+             if status == "Completed":
+                 color_value = next_color
+                 edgecolor = next_color
+                 hatch = ""
+             elif status == "In Progress":
+                 color_value = "white"
+                 edgecolor = next_color
+                 hatch = "--"
+ 
+             elif status == "Not Started":
+                 color_value = "white"
+                 edgecolor = next_color
+                 hatch = ""
+             else:
+                 color_value = "black"
+                 edgecolor = "black"
+                 hatch = "--"
+             # Use the wrap_text function to wrap the Title field for the label
+             gnt.broken_barh(
+                 [
+                     (
+                         pd.to_datetime(start),
+                         pd.to_datetime(finish) - pd.to_datetime(start),
+                     )
+                 ],
+                 [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+                 color=color_value,
+                 edgecolor=edgecolor,
+                 hatch=hatch,
+                 linewidth=3,
+                 label=wrap_text(df.loc[l, "Title"]),
+             )
+             # gnt.broken_barh(
+             #     [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
+             #     [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+             #     color=next(color),
+             #     label=df.loc[l, "Title"],
+             # )
+ 
+             data = [
+                 (pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))
+             ]
+ 
+             for x1, x2 in data:
+                 gnt.text(
+                     x=x1 + x2 / 2,
+                     y=(int(df.loc[l, "stack"]) + int(df.loc[l, "level_of_effort"]))
+                     - int(df.loc[l, "level_of_effort"]) / 2,
+                     s=wrap_text(df.loc[l, "Title"]),
+                     ha="center",
+                     va="center",
+                     color="blue",
+                     fontsize=6,
+                 )
+         gnt.set_xlabel("Date")
+         gnt.set_ylabel(
+             "Rough Average Hours per Day\nEffort Level: Low=2, Medium=4, High= 6, Average for Project.  Most projects of any length are Low=2"
+         )
+ 
+         # fig.legend(loc="upper left")
+ 
+         # top_value_benchmark = 0.710 / 10
+         # top_value = top_value_benchmark * new_max_height_plus_level_of_effort
+ 
+         plt.subplots_adjust(left=0.1, right=0.9, bottom=0.2, top=0.9)
+         # plt.xticks(rotation=45)
+         # plt.show(block=True)
+         # Generate the plot
+         img = BytesIO()
+         plt.savefig(img, format="png", dpi=100)
+ 
+         img.seek(0)
+ 
+         # (img, flush=True)
+         return img
+     # plot_url = base64.b64encode(img.getvalue()).decode("utf8")
+ 
+     # Use send_file to return the image for download
+     # return send_file(img, mimetype='image/png', as_attachment=True, download_name='chart.png')
+     # Create static/images directory if it doesn't exist
+     # os.makedirs('static/images', exist_ok=True)
+ 
+ def wrap_text(text, width=20):
+     """Wraps the text to a specified width."""
+, there was at least one mismatch.
+
+In Hunk:@@ -11,6 +12,8 @@
+ 
+ 
+ def fetch_API(label, assignee, level):
++class JiraAPI:
++    """Class to interact with JIRA API."""
+     url = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'%20AND%20type='Initiative'%20AND%20labels={label}%20AND%20assignee%20IN%20%28%22{assignee}%22%29"
+     JIRA_URL = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'"
+ 
++    def __init__(self, label, assignee, level):
++        self.label = label
++        self.assignee = assignee
++        self.level = level
++        self.url = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'%20AND%20type='Initiative'%20AND%20labels={label}%20AND%20assignee%20IN%20%28%22{assignee}%22%29"
++        self.JIRA_URL = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'"
++        self.BEARER_ACCESS_TOKEN = os.environ.get("BEARER_ACCESS_TOKEN")
++        self.headers = {
++            "Content": "application/json",
++            "Authorization": "Basic " + self.BEARER_ACCESS_TOKEN,
++        }
+     BEARER_ACCESS_TOKEN = os.environ.get("BEARER_ACCESS_TOKEN")
+ 
++    def fetch_data(self):
++        """Fetch data from JIRA API."""
++        url = self.url
++        headers = self.headers
++        level = self.level
++
+     end = "&maxResults=100"
+ 
+     # Retrieve the environment variable and set it to the variable `bearer_access_token`
+     bearer_access_token = BEARER_ACCESS_TOKEN
+ 
+     # Check if the environment variable is missing
+     if not bearer_access_token:
+         raise ValueError("Environment variable 'BEARER_ACCESS_TOKEN' is not set.")
+ 
+     headers = {
+         "Content": "application/json",
+         "Authorization": "Basic " + bearer_access_token,
+     }
+ 
+     print(url + "&maxResults=100")
+     # Make the GET request with encoded parameters
+     response = requests.get(url + "&maxResults=100", headers=headers)
+ 
+     if response.status_code in [200, 201, 202, 203, 204]:
+         try:
+             issues = response.json()["issues"]
+         except (KeyError, json.JSONDecodeError) as e:
+     url = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'%20AND%20type='Initiative'%20AND%20labels={label}%20AND%20assignee%20IN%20%28%22{assignee}%22%29"
+     JIRA_URL = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'"
+ 
+, there was at least one mismatch.
+
+In Hunk:@@ -8,6 +10,8 @@
+ load_dotenv()
+ 
+ auth = Blueprint("auth", __name__)
++class Auth:
++    """Class to handle authentication."""
+ 
++    def __init__(self):
++        self.credentials = json.loads(os.getenv("GANTT_CREDENTIALS"))
++        self.USERNAME = self.credentials["username"]
++        self.PASSWORD = self.credentials["password"]
+ # Hardcoded credentials
+ credentials = json.loads(os.getenv("GANTT_CREDENTIALS"))
+ USERNAME = credentials["username"]
+ PASSWORD = credentials["password"]
+ 
++# Hardcoded credentials
+ 
+ @auth.route("/login", methods=["GET", "POST"])
+ def login():
+     if request.method == "POST":
+         username = request.form.get("username")
+         password = request.form.get("password")
+ 
+         if username == USERNAME and password == PASSWORD:
+             session["user"] = username
+             return redirect(url_for("main.index"))
+         else:
+             flash("Invalid username or password", "error")
+             return redirect(url_for("auth.login"))
+ 
+     return render_template("login.html")
+ 
+ 
+ @auth.route("/logout")
+ def logout():
+     session.pop("user", None)
+     return redirect(url_for("auth.login"))
+ 
+ 
+ def login_required(f):
+     """Decorator to protect routes that require login."""
+ 
+     @wraps(f)
+     def decorated_function(*args, **kwargs):
+         if "user" not in session:
+             return redirect(
+                 url_for("auth.login")
+             )  # Redirect to the login page if not logged in
+ credentials = json.loads(os.getenv("GANTT_CREDENTIALS"))
+, there was at least one mismatch.
+
+In Hunk:@@ -42,6 +46,8 @@
+ 
+     @wraps(f)
+     def decorated_function(*args, **kwargs):
+         if "user" not in session:
+             return redirect(
+                 url_for("auth.login")
+             )  # Redirect to the login page if not logged in
++    """Decorator to protect routes that require login."""
+ 
+     @wraps(f)
+     def decorated_function(*args, **kwargs):
+, there was at least one mismatch.
+
+In Hunk:@@ -14,7 +96,7 @@
+ 
+     <script>
+         $(document).ready(function() {
+-                    url: '/fetchAPI', // Ensure this endpoint is handled by your local server
++                    url: '/process', // Ensure this endpoint is handled by your local server
+                     type: 'GET',
+                     data: { label: label, assignee: assignee, level: level },
+                     success: function(response) {
+, there was at least one mismatch.
+
+2025-08-09T00:35:49.718066
+In Hunk:@@ -15,6 +15,8 @@
+ from flask import Flask, request, jsonify, current_app
+ 
+ 
++class ContinuousGantt:
++    """Class to generate Gantt charts."""
+ def wrap_text(text, width=20):
+     """Wraps the text to a specified width."""
+     return "\n".join(textwrap.wrap(text, width=width))
+ 
+ 
+ def generate_gantt_chart(jira_json):
+     projects_df = pd.DataFrame.from_dict(jira_json["data"], orient="index")
+     with pd.option_context("display.max_columns", None):
+     def __init__(self, jira_data):
+         self.jira_data = jira_data
+         print(projects_df)
+ 
+     def generate(self):
+         jira_json = self.jira_data
+     # print(projects_df)
+     # projects_df = jira_json.copy(0)
+     # projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("float")
+     # projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("Int64")
+ 
+     projects_df = projects_df.reset_index()
+     if projects_df.loc[0, "Parent Project"] != "":
+         projects_df["level_of_effort"] = 1
+ 
+     elif (
+         projects_df["level_of_effort"].isnull().all()
+         and projects_df["Parent Project"].isnull().all()
+     ):
+         projects_df["level_of_effort"] = 2
+ 
+     projects_df["level_of_effort"] = projects_df["level_of_effort"].astype("Int64")
+     projects_df["stack"] = 0
+     # print(projects_df)
+     projects_df = projects_df.sort_values(["Start date", "Due date", "level_of_effort"])
+     projects_df = projects_df.rename(
+         columns={"Start date": "start_date", "Due date": "end_date"}
+     )
+     pd.set_option("display.max_columns", None)
+     pd.options.display.max_colwidth = 200
+ 
+     projects_df = projects_df.dropna(subset=["start_date", "end_date"])
+     projects_df["start_date"] = projects_df["start_date"].apply(
+         lambda x: x.replace(" 00:00:00", "")
+     )
+     projects_df["end_date"] = projects_df["end_date"].apply(
+         lambda x: x.replace(" 00:00:00", "")
+     )
+ 
+     min_start_date = (
+         projects_df["start_date"]
+         .apply(lambda x: datetime.strptime(x, "%Y-%m-%d"))
+         .min()
+     )
+ 
+     max_end_date = (
+         projects_df["end_date"].apply(lambda x: datetime.strptime(x, "%Y-%m-%d")).max()
+     )
+ 
+     delta = max_end_date - min_start_date
+     length_of_matrix = delta
+ 
+     delta = int(delta.total_seconds() / 60 / 60 / 24)
+     height_of_matrix = int(projects_df["level_of_effort"].sum())
+     if height_of_matrix < 7:
+         height_of_matrix = 7
+     rows, cols = (delta, height_of_matrix)
+     arr = [[0] * cols] * rows
+ 
+     date_range = pd.date_range(min_start_date, max_end_date)
+ 
+     range_list = list(reversed(list(range(0, height_of_matrix))))
+ 
+     for z in range(0, len(range_list)):
+         range_list[z] = str(range_list[z])
+ 
+     projects_df = projects_df.sort_values(
+         ["start_date", "end_date", "level_of_effort"],
+         ascending=[True, False, True],  # Specify the sorting order for each column
+     )
+     master_plotting_df = pd.DataFrame(
+         data=np.zeros((height_of_matrix, len(date_range)), dtype=int),
+         index=range(height_of_matrix),
+         columns=date_range,
+     )
+ 
+     master_plotting_df = master_plotting_df.applymap(lambda x: 0)
+ 
+     project_plotting_df = master_plotting_df.copy()
+ 
+     # Assign stack levels avoiding overlap
+     for i, row in projects_df.iterrows():
+         start = row["start_date"]
+         end = row["end_date"]
+         effort = int(row["level_of_effort"])
+         date_slice = pd.date_range(start, end)
+ 
+         for y in range(height_of_matrix - effort + 1):
+             row_slice = list(range(y, y + effort))  # keep as integers to match index
+             try:
+                 slice_df = master_plotting_df.loc[row_slice, date_slice]
+             except KeyError as e:
+                 logging.error(f"KeyError accessing plotting matrix at row {y}: {e}")
+                 continue
+ 
+             if (slice_df != 0).any().any():
+                 continue  # overlap, try next level
+             else:
+                 # No conflict – assign and mark
+                 projects_df.at[i, "stack"] = y
+                 master_plotting_df.loc[row_slice, date_slice] = 1
+                 break
+ 
+     new_max_height_df = projects_df.copy()
+     new_max_height = projects_df["stack"].max()
+     new_max_height_df = projects_df[projects_df["stack"] == new_max_height]
+     new_max_height_plus_level_of_effort = (
+         int(new_max_height_df["level_of_effort"].max()) + new_max_height
+     )
+ 
+     df = projects_df.copy()
+     df = df.reset_index()
+     if df.loc[0, "Parent Project"] != "":
+         unique_parents = df["Parent Project"].unique()
+         parent_color_map = {
+             parent: cm.rainbow(i / len(unique_parents))
+             for i, parent in enumerate(unique_parents)
+         }
+         fig, gnt = plt.subplots(figsize=(12, 6))
+ 
+         # array = np.linspace(0, 1, len(df))
+         # np.random.shuffle(array)
+ 
+         # color = iter(cm.rainbow(array))
+ 
+         # df = df.reset_index()
+ 
+         for l in range(0, len(df)):
+             start = datetime.strptime(df.loc[l, "start_date"], "%Y-%m-%d")
+             finish = datetime.strptime(df.loc[l, "end_date"], "%Y-%m-%d")
+             status = df.loc[l, "Status"]
+             parent_project = df.loc[l, "Parent Project"]
+             parent_color = parent_color_map[parent_project]
+ 
+             if status == "Completed":
+                 color_value = parent_color
+                 edgecolor = parent_color
+                 hatch = ""
+             elif status == "In Progress":
+                 color_value = "white"
+                 edgecolor = parent_color
+                 hatch = "--"
+ 
+             elif status == "Not Started":
+                 color_value = "white"
+                 edgecolor = parent_color
+                 hatch = ""
+             else:
+                 color_value = "black"
+                 edgecolor = "black"
+                 hatch = "--"
+             # Use the wrap_text function to wrap the Title field for the label
+             gnt.broken_barh(
+                 [
+                     (
+                         pd.to_datetime(start),
+                         pd.to_datetime(finish) - pd.to_datetime(start),
+                     )
+                 ],
+                 [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+                 color=color_value,
+                 edgecolor=edgecolor,
+                 hatch=hatch,
+                 linewidth=3,
+                 label=wrap_text(df.loc[l, "Title"]),
+             )
+             # gnt.broken_barh(
+             #     [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
+             #     [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+             #     color=next(color),
+             #     label=df.loc[l, "Title"],
+             # )
+ 
+             data = [
+                 (pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))
+             ]
+ 
+             title_number_map = {
+                 title: str(i + 1) for i, title in enumerate(df["Title"].unique())
+             }
+             title_number = title_number_map[df.loc[l, "Title"]]
+             for x1, x2 in data:
+                 gnt.text(
+                     x=x1 + x2 / 2,
+                     y=(int(df.loc[l, "stack"]) + int(df.loc[l, "level_of_effort"]))
+                     - int(df.loc[l, "level_of_effort"]) / 2,
+                     s=title_number,
+                     ha="center",
+                     va="center",
+                     color="blue",
+                     fontsize=6,
+                 )
+         gnt.set_xlabel("Date")
+         gnt.set_ylabel(
+             "Rough Average Hours per Day\nEffort Level: Low=2, Medium=4, High= 6, Average for Project.  Most projects of any length are Low=2"
+         )
+ 
+         parent_legend_handles = [
+             mpatches.Patch(color=color, label=wrap_text(parent, width=25))
+             for parent, color in parent_color_map.items()
+         ]
+         parent_legend_handles = [
+             mpatches.Patch(color=color, label=wrap_text(parent, width=25))
+             for parent, color in parent_color_map.items()
+         ]
+         legend2 = gnt.legend(
+             handles=parent_legend_handles,
+             loc="lower left",
+             bbox_to_anchor=(0.0, 0.0),
+             title="Parent Projects",
+             prop={"size": 6},
+         )
+         gnt.add_artist(legend2)
+ 
+         # Title-number legend
+         title_legend_handles = [
+             mpatches.Patch(color="white", label=f"{num}: {wrap_text(title, width=40)}")
+             for title, num in title_number_map.items()
+         ]
+         legend1 = gnt.legend(
+             handles=title_legend_handles,
+             loc="upper left",
+             bbox_to_anchor=(1.02, 1.0),
+             title="Project Titles",
+             frameon=False,
+             prop={"size": 6},
+         )
+         gnt.add_artist(legend1)
+         # Shrink axis tick and label font sizes
+         gnt.tick_params(axis="both", which="major", labelsize=6)
+         gnt.xaxis.label.set_size(6)
+         gnt.yaxis.label.set_size(6)
+         # top_value_benchmark = 0.710 / 10
+         # top_value = top_value_benchmark * new_max_height_plus_level_of_effort
+ 
+         plt.subplots_adjust(left=0.1, right=0.85, bottom=0.15, top=0.9)
+         # plt.xticks(rotation=45)
+         # plt.show(block=True)
+         # Generate the plot
+         img = BytesIO()
+         plt.savefig(img, format="png", dpi=100)
+ 
+         img.seek(0)
+ 
+         # (img, flush=True)
+         return img
+ 
+     else:
+         fig, gnt = plt.subplots(figsize=(12, 6))  # half the height
+ 
+         array = np.linspace(0, 1, len(df))
+         np.random.shuffle(array)
+ 
+         color = iter(cm.rainbow(array))
+ 
+         # df = df.reset_index()
+ 
+         for l in range(0, len(df)):
+             start = datetime.strptime(df.loc[l, "start_date"], "%Y-%m-%d")
+             finish = datetime.strptime(df.loc[l, "end_date"], "%Y-%m-%d")
+             status = df.loc[l, "Status"]
+             parent_project = df.loc[l, "Parent Project"]
+             next_color = next(color)
+ 
+             if status == "Completed":
+                 color_value = next_color
+                 edgecolor = next_color
+                 hatch = ""
+             elif status == "In Progress":
+                 color_value = "white"
+                 edgecolor = next_color
+                 hatch = "--"
+ 
+             elif status == "Not Started":
+                 color_value = "white"
+                 edgecolor = next_color
+                 hatch = ""
+             else:
+                 color_value = "black"
+                 edgecolor = "black"
+                 hatch = "--"
+             # Use the wrap_text function to wrap the Title field for the label
+             gnt.broken_barh(
+                 [
+                     (
+                         pd.to_datetime(start),
+                         pd.to_datetime(finish) - pd.to_datetime(start),
+                     )
+                 ],
+                 [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+                 color=color_value,
+                 edgecolor=edgecolor,
+                 hatch=hatch,
+                 linewidth=3,
+                 label=wrap_text(df.loc[l, "Title"]),
+             )
+             # gnt.broken_barh(
+             #     [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
+             #     [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
+             #     color=next(color),
+             #     label=df.loc[l, "Title"],
+             # )
+ 
+             data = [
+                 (pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))
+             ]
+ 
+             for x1, x2 in data:
+                 gnt.text(
+                     x=x1 + x2 / 2,
+                     y=(int(df.loc[l, "stack"]) + int(df.loc[l, "level_of_effort"]))
+                     - int(df.loc[l, "level_of_effort"]) / 2,
+                     s=wrap_text(df.loc[l, "Title"]),
+                     ha="center",
+                     va="center",
+                     color="blue",
+                     fontsize=6,
+                 )
+         gnt.set_xlabel("Date")
+         gnt.set_ylabel(
+             "Rough Average Hours per Day\nEffort Level: Low=2, Medium=4, High= 6, Average for Project.  Most projects of any length are Low=2"
+         )
+ 
+         # fig.legend(loc="upper left")
+ 
+         # top_value_benchmark = 0.710 / 10
+         # top_value = top_value_benchmark * new_max_height_plus_level_of_effort
+ 
+         plt.subplots_adjust(left=0.1, right=0.9, bottom=0.2, top=0.9)
+         # plt.xticks(rotation=45)
+         # plt.show(block=True)
+         # Generate the plot
+         img = BytesIO()
+         plt.savefig(img, format="png", dpi=100)
+ 
+         img.seek(0)
+ 
+         # (img, flush=True)
+         return img
+     # plot_url = base64.b64encode(img.getvalue()).decode("utf8")
+ 
+     # Use send_file to return the image for download
+     # return send_file(img, mimetype='image/png', as_attachment=True, download_name='chart.png')
+     # Create static/images directory if it doesn't exist
+     # os.makedirs('static/images', exist_ok=True)
+ 
+ def wrap_text(text, width=20):
+     """Wraps the text to a specified width."""
+, there was at least one mismatch.
+
+In Hunk:@@ -11,6 +11,8 @@
+ 
+ 
+ def fetch_API(label, assignee, level):
++class JiraAPI:
++    """Class to interact with JIRA API."""
+     url = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'%20AND%20type='Initiative'%20AND%20labels={label}%20AND%20assignee%20IN%20%28%22{assignee}%22%29"
+     JIRA_URL = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'"
+ 
++    def __init__(self, label, assignee, level):
++        self.label = label
++        self.assignee = assignee
++        self.level = level
++        self.url = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'%20AND%20type='Initiative'%20AND%20labels={label}%20AND%20assignee%20IN%20%28%22{assignee}%22%29"
++        self.JIRA_URL = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'"
++        self.BEARER_ACCESS_TOKEN = os.environ.get("BEARER_ACCESS_TOKEN")
++        self.headers = {
++            "Content": "application/json",
++            "Authorization": "Basic " + self.BEARER_ACCESS_TOKEN,
++        }
+     BEARER_ACCESS_TOKEN = os.environ.get("BEARER_ACCESS_TOKEN")
+ 
++    def fetch_data(self):
++        """Fetch data from JIRA API."""
++        url = self.url
++        headers = self.headers
++        level = self.level
++
+     end = "&maxResults=100"
+ 
+     # Retrieve the environment variable and set it to the variable `bearer_access_token`
+     bearer_access_token = BEARER_ACCESS_TOKEN
+ 
+     # Check if the environment variable is missing
+     if not bearer_access_token:
+         raise ValueError("Environment variable 'BEARER_ACCESS_TOKEN' is not set.")
+ 
+     headers = {
+         "Content": "application/json",
+         "Authorization": "Basic " + bearer_access_token,
+     }
+ 
+     print(url + "&maxResults=100")
+     # Make the GET request with encoded parameters
+     response = requests.get(url + "&maxResults=100", headers=headers)
+ 
+     if response.status_code in [200, 201, 202, 203, 204]:
+         try:
+             issues = response.json()["issues"]
+         except (KeyError, json.JSONDecodeError) as e:
+     url = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'%20AND%20type='Initiative'%20AND%20labels={label}%20AND%20assignee%20IN%20%28%22{assignee}%22%29"
+     JIRA_URL = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'"
+ 
+, there was at least one mismatch.
+
+In Hunk:@@ -8,6 +8,8 @@
+ load_dotenv()
+ 
+ auth = Blueprint("auth", __name__)
++class Auth:
++    """Class to handle authentication."""
+ 
++    def __init__(self):
++        self.credentials = json.loads(os.getenv("GANTT_CREDENTIALS"))
++        self.USERNAME = self.credentials["username"]
++        self.PASSWORD = self.credentials["password"]
+ # Hardcoded credentials
+ credentials = json.loads(os.getenv("GANTT_CREDENTIALS"))
+ USERNAME = credentials["username"]
+ PASSWORD = credentials["password"]
+ 
++# Hardcoded credentials
+ 
+ @auth.route("/login", methods=["GET", "POST"])
+ def login():
+     if request.method == "POST":
+     def login(self):
+         """Handle user login."""
+         username = request.form.get("username")
+         password = request.form.get("password")
+ 
+         if username == USERNAME and password == PASSWORD:
+             session["user"] = username
+             return redirect(url_for("main.index"))
+         else:
+             flash("Invalid username or password", "error")
+             return redirect(url_for("auth.login"))
+ 
+     return render_template("login.html")
+ 
+ 
+ @auth.route("/logout")
+ def logout():
+     session.pop("user", None)
+     return redirect(url_for("auth.login"))
+ 
+ 
+ def login_required(f):
+     """Decorator to protect routes that require login."""
+ 
+     @wraps(f)
+     def decorated_function(*args, **kwargs):
+         if "user" not in session:
+             return redirect(
+                 url_for("auth.login")
+             )  # Redirect to the login page if not logged in
+         return f(*args, **kwargs)
+     def logout(self):
+ credentials = json.loads(os.getenv("GANTT_CREDENTIALS"))
+, there was at least one mismatch.
+
+In Hunk:@@ -14,7 +96,7 @@
+ 
+     <script>
+         $(document).ready(function() {
+-                    url: '/fetchAPI', // Ensure this endpoint is handled by your local server
++                    url: '/process', // Ensure this endpoint is handled by your local server
+                     type: 'GET',
+                     data: { label: label, assignee: assignee, level: level },
+                     success: function(response) {
+, there was at least one mismatch.
+
+2025-08-09T00:36:09.524106
+In @@ -23,7 +25,7 @@
+     return "\n".join(textwrap.wrap(text, width=width))
+ 
+ 
+-def generate_gantt_chart(jira_json):
++    def generate(self):
+         jira_json = self.jira_data
+         projects_df = pd.DataFrame.from_dict(jira_json["data"], orient="index")
+         with pd.option_context("display.max_columns", None):
+:The starting line of the diff @@ -23,7 +25,7 @@
+     return "\n".join(textwrap.wrap(text, width=width))
+ 
+ 
+-def generate_gantt_chart(jira_json):
++    def generate(self):
+         jira_json = self.jira_data
+         projects_df = pd.DataFrame.from_dict(jira_json["data"], orient="index")
+         with pd.option_context("display.max_columns", None):
+ does not exist in the code
+
+In Hunk:@@ -8,6 +8,8 @@
+ load_dotenv()
+ 
+ auth = Blueprint("auth", __name__)
++class Auth:
++    """Class to handle authentication."""
+ 
++    def __init__(self):
++        self.credentials = json.loads(os.getenv("GANTT_CREDENTIALS"))
++        self.USERNAME = self.credentials["username"]
++        self.PASSWORD = self.credentials["password"]
+ # Hardcoded credentials
+ credentials = json.loads(os.getenv("GANTT_CREDENTIALS"))
+ USERNAME = credentials["username"]
+ PASSWORD = credentials["password"]
+ 
++# Hardcoded credentials
+ 
+ @auth.route("/login", methods=["GET", "POST"])
+ def login():
+     if request.method == "POST":
+     def login(self):
+         """Handle user login."""
+     def login(self):
+         """Handle user login."""
+         username = request.form.get("username")
+         password = request.form.get("password")
+ 
+         if username == USERNAME and password == PASSWORD:
+             session["user"] = username
+             return redirect(url_for("main.index"))
+         else:
+             flash("Invalid username or password", "error")
+             return redirect(url_for("auth.login"))
+ 
+     return render_template("login.html")
+ 
+ 
+ @auth.route("/logout")
+     def logout(self):
+         """Handle user logout."""
+ def logout():
+     session.pop("user", None)
+     return redirect(url_for("auth.login"))
+ 
+ 
+ def login_required(f):
+     """Decorator to protect routes that require login."""
+     """Decorator to protect routes that require login."""
+ 
+     @wraps(f)
+     def decorated_function(*args, **kwargs):
+         if "user" not in session:
+             return redirect(
+                 url_for("auth.login")
+             )  # Redirect to the login page if not logged in
+         return f(*args, **kwargs)
+     def logout(self):
+ credentials = json.loads(os.getenv("GANTT_CREDENTIALS"))
+, there was at least one mismatch.
+
+In Hunk:@@ -14,7 +96,7 @@
+ 
+     <script>
+         $(document).ready(function() {
+-                    url: '/fetchAPI', // Ensure this endpoint is handled by your local server
++                    url: '/process', // Ensure this endpoint is handled by your local server
+                     type: 'GET',
+                     data: { label: label, assignee: assignee, level: level },
+                     success: function(response) {
+, there was at least one mismatch.
