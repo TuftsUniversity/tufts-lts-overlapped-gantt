@@ -140,6 +140,8 @@ def generate_gantt_chart(jira_json):
         fig, gnt = plt.subplots(figsize=(12, 6))
 
 
+       
+
         #array = np.linspace(0, 1, len(df))
         #np.random.shuffle(array)
         

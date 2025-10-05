@@ -11,34 +11,33 @@ import urllib
 
 def fetch_API(label, assignee, level):
     
-    
-    url = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'%20AND%20type='Initiative'%20AND%20labels={label}%20AND%20assignee%20IN%20%28%22{assignee}%22%29"
-    JIRA_URL = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'"
-   
+     # Base JQL query
+    jql = (
+        f"project='LGP' AND type='Initiative' "
+        f"AND labels={label} "
+        f"AND assignee IN (\"{assignee}\")"
+    )
 
-    
+    # New JQL search endpoint
+    url = (
+        "https://tuftswork.atlassian.net/rest/api/3/search/jql"
+        f"?jql={urllib.parse.quote(jql)}"
+        "&maxResults=100"
+        "&fields=summary,status,assignee,customfield_10338,customfield_10022,customfield_10023,customfield_10015,duedate"
+    )
+
+
     BEARER_ACCESS_TOKEN = os.environ.get("BEARER_ACCESS_TOKEN")
-   
-    end = "&maxResults=100"
-
-    # Retrieve the environment variable and set it to the variable `bearer_access_token`
-    bearer_access_token = BEARER_ACCESS_TOKEN
-
-    # Check if the environment variable is missing
-    if not bearer_access_token:
+    if not BEARER_ACCESS_TOKEN:
         raise ValueError("Environment variable 'BEARER_ACCESS_TOKEN' is not set.")
 
     headers = {
-        "Content": "application/json",
-        "Authorization": "Basic " + bearer_access_token
+        "Accept": "application/json",
+        "Authorization": "Basic " + BEARER_ACCESS_TOKEN,
     }
 
-    print(url + "&maxResults=100")
-    # Make the GET request with encoded parameters
-    response = requests.get(url + "&maxResults=100", headers=headers)
-
-    
-
+    print("Calling:", url)
+    response = requests.get(url, headers=headers)
     if response.status_code in [200, 201, 202, 203, 204]:
         # Create DataFrame with additional column for Assignee
         df = pd.DataFrame(
@@ -96,10 +95,17 @@ def fetch_API(label, assignee, level):
                 child_query = f'parent = "{key}"'
                 
                 # Alternative: If Initiatives are parents in JIRA
+
                 # child_query = f'parent={key}'
                 
-                child_response = requests.get(
-                    f"{JIRA_URL}%20AND%20{child_query}&maxResults=100",
+                children_url  = (
+                "https://tuftswork.atlassian.net/rest/api/3/search/jql"
+                f"?jql={child_query}"
+                "&maxResults=100"
+                "&fields=summary,status,assignee,customfield_10338,customfield_10022,customfield_10023,customfield_10015,duedate"
+                )           
+                
+                child_response = requests.get(children_url,
                     headers=headers,
                 ).json()
                 
