@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, current_app
+from flask import Flask, request, jsonify, current_app, flash
 import os
 import requests
 import re
@@ -7,6 +7,8 @@ import numpy as np
 from dotenv import load_dotenv
 import os
 import urllib
+import urllib.parse
+import json
 
 
 def fetch_API(label, assignee, level):
@@ -23,7 +25,7 @@ def fetch_API(label, assignee, level):
         "https://tuftswork.atlassian.net/rest/api/3/search/jql"
         f"?jql={urllib.parse.quote(jql)}"
         "&maxResults=100"
-        "&fields=summary,status,assignee,customfield_10338,customfield_10022,customfield_10023,customfield_10015,duedate"
+        "&fields=summary,status,assignee,customfield_10338,customfield_10022,customfield_10023,customfield_10015,duedate,customfield_10053"
     )
 
 
@@ -91,29 +93,56 @@ def fetch_API(label, assignee, level):
                 project_title = title
                 child_issues = []
             
-                # Use "issueLinkType" if there's a link relationship
-                child_query = f'parent = "{key}"'
                 
-                # Alternative: If Initiatives are parents in JIRA
 
-                # child_query = f'parent={key}'
-                
-                children_url  = (
-                "https://tuftswork.atlassian.net/rest/api/3/search/jql"
-                f"?jql={child_query}"
-                "&maxResults=100"
-                "&fields=summary,status,assignee,customfield_10338,customfield_10022,customfield_10023,customfield_10015,duedate"
-                )           
-                
-                child_response = requests.get(children_url,
-                    headers=headers,
-                ).json()
-                
-                # print(child_response)
-                for child_issue in child_response.get("issues", []):
+                child_query = f'parent = "{key}"'
+                encoded_jql = urllib.parse.quote(child_query)
+
+                children_url = (
+                    "https://tuftswork.atlassian.net/rest/api/3/search/jql"
+                    f"?jql={encoded_jql}"
+                    "&maxResults=100"
+                    "&fields=summary,status,assignee,customfield_10338,customfield_10022,"
+                    "customfield_10023,customfield_10015,duedate,customfield_10053"
+                )
+
+                print("Fetching children:", children_url)  # ✅ shows full encoded URL
+
+                child_resp = requests.get(children_url, headers=headers)
+                try:
+                    child_json = child_resp.json()
+                except ValueError:
+                    print("⚠️ Jira returned non-JSON response:", child_resp.text)
+                    return jsonify({"error": "Invalid response from Jira"}), 500
+
+                # Handle Jira parser or permission errors explicitly
+                if "errorMessages" in child_json:
+                    print("⚠️ Jira JQL parser error:", child_json["errorMessages"])
+                    return jsonify({"error": child_json["errorMessages"]}), 400
+
+                child_issues = child_json.get("issues", [])
+
+                child_resp = requests.get(children_url, headers=headers)
+                try:
+                    child_json = child_resp.json()
+                except ValueError:
+                    print("⚠️ Jira returned non-JSON content:", child_resp.text)
+                    continue  # skip this parent safely
+
+                # Check if Jira is reporting a parse error or other problem
+                if "errorMessages" in child_json:
+                    print(f"⚠️ Jira parser error for {key}: {child_json['errorMessages']}")
+                    print("Full JQL URL:", children_url)
+                    continue  # skip to next initiative safely
+
+                if "issues" not in child_json:
+                    print(f"⚠️ Unexpected Jira response for {key}: {child_json}")
+                    continue
+
+                for child_issue in child_json["issues"]:
                     child_issues.append(child_issue)
 
-                #print(child_issues)
+                
                 # Print Child Issues
                 for child_issue in child_issues:
                     #empty out values from outer scope
@@ -122,6 +151,8 @@ def fetch_API(label, assignee, level):
                     level_of_effort = ""
                     start_date = ""
                     due_date = ""
+                    story_points = ""
+                    
 
                     title = child_issue["fields"]["summary"]
                     status = child_issue['fields']['status']['name']
@@ -151,28 +182,50 @@ def fetch_API(label, assignee, level):
                     start_date = child_issue["fields"].get("customfield_10022", None)
                     due_date = child_issue["fields"].get("customfield_10023", None)
 
+
+                    if "customfield_10053" in child_issue["fields"]:
+                        story_points = child_issue["fields"].get("customfield_10053", None)
+
             
+                    else:
+                        flash("No Story Points Found for " + title)                        
+                        continue
                     if start_date == None:
                         start_date = child_issue["fields"].get("customfield_10015", None)
 
                     if due_date == None:
                         due_date = child_issue["fields"].get("duedate", None)
-                            
+
+                        
                         # Append the row with the new Assignee column
-                    rows.append([title, level_of_effort, start_date, due_date, assignee, status, project_title])
+                    rows.append([title, level_of_effort, start_date, due_date, assignee, status, project_title, story_points])
 
             else:
-                rows.append([title, level_of_effort, start_date, due_date, assignee, status, ""])
+                rows.append([title, level_of_effort, start_date, due_date, assignee, status, "", ""])
 
 
         # Create DataFrame
         df = pd.DataFrame(
             rows,
-            columns=["Title", "level_of_effort", "Start date", "Due date", "Assignee", "Status", "Parent Project"],
+            columns=[
+                "Title",
+                "level_of_effort",
+                "start_date",
+                "end_date",
+                "assignee",
+                "Status",
+                "Parent Project",
+                "story_points",
+            ],
         )
-        
-        # print(df)
-        return jsonify({"status": "success", "data": df.to_dict(orient="index")})
 
-    else:
-        return jsonify({"message": "JIRA lookup failure.  Check label exists"}), 400
+        # Use to_json() instead of jsonify() to ensure valid JSON (no NaN)
+        json_output = {
+            "status": "success",
+            "data": json.loads(df.to_json(orient="index", date_format="iso"))
+        }
+
+        return current_app.response_class(
+            json.dumps(json_output),
+            mimetype="application/json"
+        )
