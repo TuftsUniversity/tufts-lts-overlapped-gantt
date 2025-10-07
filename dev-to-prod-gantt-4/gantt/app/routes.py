@@ -1,34 +1,151 @@
-from flask import Blueprint, request, jsonify
-from .continuous_gantt import ContinuousGantt
-from .jira_api import JiraAPI
-from .auth import 
+from flask import Blueprint, session, render_template, request, jsonify
+from app.continuous_gantt import ContinuousGantt
+from app.jira_api import JiraAPI
+from app.auth import login, login_required, logout
+import logging
 
-routes = Blueprint('routes', __name__)
 
-class Routes:
-    """Class to handle routing and processing of requests."""
+main = Blueprint("main", __name__)
+from werkzeug.utils import secure_filename
+from .auth import login_required
+from flask import current_app, send_file
+import base64
 
-    # def __init__(self):
-    #     self.auth = Auth()
+from flask import Flask, request, jsonify
+import os
+from werkzeug.utils import secure_filename
 
-    def process(self):
-        """Instantiate and invoke methods from other classes."""
-        label = request.args.get('label')
-        assignee = request.args.get('assignee')
-        level = request.args.get('level')
+app = Flask(__name__)
 
-        # Instantiate JiraAPI and fetch data
-        jira_api = JiraAPI(label, assignee, level)
-        jira_data = jira_api.fetch_data()
+UPLOAD_FOLDER = "./uploads"
+ALLOWED_EXTENSIONS = {"xlsx", "xls"}
+# app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-        # Instantiate ContinuousGantt and generate chart
-        gantt_chart = ContinuousGantt(jira_data)
-        chart_image = gantt_chart.generate()
 
-        return jsonify({"status": "success", "image_data": chart_image})
+@main.route("/", methods=["GET", "POST"])
+@login_required
+def index():
+    return render_template("index.html")
 
-@routes.route('/process', methods=['GET'])
-def process_route():
-    """Route to process and generate Gantt chart."""
-    routes_instance = Routes()
-    return routes_instance.process()
+
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in {"xlsx", "xls"}
+
+
+# @main.route("/", methods=['GET', 'POST'])
+# @login_required
+# def index():
+#     return render_template("index.html")
+
+
+@main.route("/upload", methods=["POST"])
+@login_required
+def upload_file():
+    if "file" not in request.files:
+        return jsonify({"message": "No file part"}), 400
+
+    file = request.files["file"]
+
+    if file.filename == "":
+        return jsonify({"message": "No selected file"}), 400
+
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file.save(os.path.join(current_app.config["UPLOAD_FOLDER"], filename))
+        return jsonify({"message": "File successfully uploaded"}), 200
+
+    return jsonify({"message": "Invalid file format"}), 400
+
+
+# @main.route("/fetchAPI", methods=["GET"])
+# @login_required
+# def fetchAPI():
+#     print(request.args["label"])
+
+#     response = fetch_API(request.args["label"], request.args["assignee"], request.args['level'])
+
+
+#     return response
+
+
+@main.route("/process", methods=["GET", "POST"])
+@login_required
+def process():
+    data = request.get_json(silent=True) or {}
+    # If GET, pull from query string
+    label = data.get("label") or request.args.get("label")
+    assignee = data.get("assignee") or request.args.get("assignee")
+    level = data.get("level") or request.args.get("level")
+
+    # Instantiate JiraAPI and fetch data
+    jira_api = JiraAPI(label, assignee, level)
+    jira_data = jira_api.fetch_data()
+
+    print(jira_data)
+
+    # Instantiate ContinuousGantt and generate chart
+    gantt_chart = ContinuousGantt(jira_data)
+    chart_image = gantt_chart.generate()
+
+    #return jsonify({"status": "success", "image_data": chart_image})
+    image_b64 = base64.b64encode(chart_image.getvalue()).decode('ascii')
+    return jsonify({"status": "success", "image_data": image_b64})
+
+@app.route("/download-image")
+def download_image():
+    # Serve the image file from the 'static/images' folder
+    return send_file(
+        "static/images/chart.png",
+        mimetype="image/png",
+        as_attachment=True,
+        download_name="chart.png",
+    )
+
+
+@main.route("/generate", methods=["POST"])
+def generate():
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"status": "error", "message": "No data provided"}), 400
+
+    # Process the data (this part should contain your processing logic)
+    projects_df = data.get("projects_df")
+
+    # try:
+    # Your logic here
+    # For example, generating a chart and returning the image data
+    # In this case, we will simulate the result for demo purposes
+
+    result = generate_gantt_chart(projects_df)
+
+    result.seek(0)
+    img_base64 = base64.b64encode(result.getvalue()).decode("utf-8")
+
+    return jsonify({"status": "success", "image_data": img_base64})
+    # except Exception as e:
+    #    print(f"Error processing data: {e}")
+    #    return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# @main.route("/generate", methods=["POST"])
+# def generate():
+#     # Retrieve the JSON data sent in the request body
+#     jira_json = request.get_json()  # Get JSON data from the request
+
+#     if jira_json is None:
+#         return jsonify({'status': 'error', 'message': 'No data provided'}), 400
+
+#     else:
+#         print(jira_json)  # Print the JSON to inspect it
+
+
+#         result = generate_gantt_chart(jira_json)
+
+
+#         result.seek(0)
+#         img_base64 = base64.b64encode(result.getvalue()).decode('utf-8')
+
+
+#         return jsonify({"status": "success", "image_data": img_base64})
+#         #return send_file(result, mimetype='image/png', as_attachment=True, download_name='chart.png')

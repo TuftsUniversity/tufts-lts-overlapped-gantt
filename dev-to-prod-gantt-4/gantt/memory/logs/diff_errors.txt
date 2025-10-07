@@ -1,0 +1,62 @@
+
+2025-08-19T18:00:12.102320
+
+
+2025-08-19T18:07:40.968158
+In Hunk:@@ -6,13 +46,13 @@
+ 
+ 
+ load_dotenv()
+ 
+ auth = Blueprint("auth", __name__)
+     """Decorator to protect routes that require login."""
+ 
+     @wraps(f)
+     def decorated_function(*args, **kwargs):
+         if "user" not in session:
+-            return redirect(
+-                url_for("auth.login")
+-            )  # Redirect to the login page if not logged in
++            return redirect(url_for("auth.login"))  # Redirect to the login page if not logged in
+         return f(*args, **kwargs)
+ 
+     return decorated_function
+, there was at least one mismatch.
+
+In Hunk:@@ -6,7 +25,7 @@
+ 
+ 
+ main = Blueprint("main", __name__)
+ from werkzeug.utils import secure_filename
+ @main.route("/", methods=["GET", "POST"])
+ @login_required
+ def index():
+     return render_template("index.html")
+ 
+ def allowed_file(filename):
+     return "." in filename and filename.rsplit(".", 1)[1].lower() in {"xlsx", "xls"}
+, there was at least one mismatch.
+
+2025-08-19T18:07:48.384543
+In Hunk:@@ -6,13 +46,13 @@
+ 
+ 
+ load_dotenv()
+ 
+ auth = Blueprint("auth", __name__)
+     """Decorator to protect routes that require login."""
+ 
+     @wraps(f)
+     def decorated_function(*args, **kwargs):
+         if "user" not in session:
+-            return redirect(
+-                url_for("auth.login")
+-            )  # Redirect to the login page if not logged in
++            return redirect(url_for("auth.login"))  # Redirect to the login page if not logged in
+         return f(*args, **kwargs)
+ 
+     return decorated_function
+, there was at least one mismatch.
+
+2025-08-19T18:08:11.113743
+

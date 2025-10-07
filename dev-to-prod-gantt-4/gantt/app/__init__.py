@@ -11,10 +11,8 @@ def create_app():
     # Set upload folder and allowed extensions
     app.config["UPLOAD_FOLDER"] = "./uploads"
     app.config["ALLOWED_EXTENSIONS"] = {"xlsx", "xls"}
-    app.config["BEARER_ACCESS_TOKEN"] = os.environ.get(
-        "BEARER_ACCESS_TOKEN", "default_secret_key"
-    )
-    # app.config["ENV"] = os.environ.get("FLASK_ENV", "production")
+    app.config["BEARER_ACCESS_TOKEN"] = os.environ.get("BEARER_ACCESS_TOKEN", "default_secret_key")
+    #app.config["ENV"] = os.environ.get("FLASK_ENV", "production")
 
     with app.app_context():
         # Import and register blueprints
@@ -22,9 +20,6 @@ def create_app():
         from .auth import auth
 
         app.register_blueprint(main)
-        app.register_blueprint(main)
         app.register_blueprint(auth)
-        from .routes import routes
-        app.register_blueprint(routes)
 
     return app

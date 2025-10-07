@@ -91,129 +91,71 @@
             </div>
             
             
-    <script>
-        $(document).ready(function() {
-            $('#fetch-btn').click(function() {
+   <script>
+$(document).ready(function () {
+  $('#fetch-btn').click(function () {
+    $('#hourglass').show();
 
-    
-                $('#hourglass').show();
+    const label = $('#label').val();
+    let assignee = $('#assignee-select').val();
+    const level = $('#level-select').val();
 
-   
-                var label = document.getElementById("label").value;
-                var assignee = document.getElementById("assignee-select").value;
-                var level = document.getElementById("level-select").value;
-                
-                //alert("Selected Label: " + label + ", Selected Assignee: " + assignee);
-                let list = [];
-                if (assignee == "All"){
+    // If "All" is selected, build a comma-separated list of names
+    if (assignee === 'All') {
+      const names = [];
+      $('#assignee-select option').each(function () {
+        const v = $(this).val();
+        if (v && v !== 'All') names.push(v);
+      });
+      // Keep existing server contract: a single string of names
+      assignee = names.join('","');
+    }
 
-                    $('#assignee-select option').each(function() {
-                    if ($(this).val() !== 'All') {
-                        list.push(encodeURIComponent($(this).val()));// This will log each value except "All"
-                            // You can add the value to an array or perform other actions here
-                        }
-                    });
-                    
-                    assignee = `${list.join('","')}`;
-                    
+    $.ajax({
+      url: '/process',
+      type: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({ label, assignee, level }),
+      success: function (data) {
+        // data should be { status: 'success', image_data: '...' }
+        $('#hourglass').hide();
 
-                    
-                }
+        if (data && data.status === 'success' && data.image_data) {
+          $('#app-description').hide();
+          $('#output').attr('src', 'data:image/png;base64,' + data.image_data).show();
+          $('#download-container').show();
 
-                
+          $('#download-btn').off('click').on('click', function () {
+            // Download the chart as PNG
+            const byteCharacters = atob(data.image_data);
+            const byteNumbers = Array.from({ length: byteCharacters.length }, (_, i) =>
+              byteCharacters.charCodeAt(i)
+            );
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: 'image/png' });
 
-                // Using relative path to avoid cross-origin fetch
-                $.ajax({
-                    url: '/fetchAPI', // Ensure this endpoint is handled by your local server
-                    type: 'GET',
-                    data: { label: label, assignee: assignee, level: level },
-                    success: function(response) {
-                        //alert(response.message);
-                        fetch('/generate', { 
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ projects_df: response }) // Use 'body' to send data
-                        })
-                        .then(response => response.json()) // Expecting JSON response
-                        .then(data => {
-                            if (data.status === 'success') {
-                                $('#hourglass').hide();
-                                $('#app-description').hide();
-                                $('#output').attr('src', 'data:image/png;base64,' + data.image_data);
-                                $('#output').show();
-                                $('#download-btn').off('click').on('click', function () {
-                                // Create a Blob from the base64 data and trigger download
-                                    const byteCharacters = atob(data.image_data);  // Decode base64 string
-                                    const byteNumbers = new Array(byteCharacters.length).fill().map((_, i) => byteCharacters.charCodeAt(i));
-                                    const byteArray = new Uint8Array(byteNumbers);
-                                    const blob = new Blob([byteArray], { type: 'image/png' });
-
-                                    const url = window.URL.createObjectURL(blob);  // Create Blob URL
-                                    const a = document.createElement('a');  // Create <a> element for download
-                                    a.href = url;
-                                    a.download = 'gantt_chart.png';  // Set download filename
-                                    document.body.appendChild(a);
-                                    a.click();  // Simulate click to trigger download
-                                    document.body.removeChild(a);  // Clean up DOM
-                                    window.URL.revokeObjectURL(url);  //
-                                })
-                            } else {
-                                throw new Error('Failed to generate the chart');
-                            }
-                        })
-                        .catch(error => {
-                            alert("Error: " + error.message);
-                        });
-                    },
-                    error: function(jqXHR, textStatus, errorThrown) {
-                        alert("Failed to fetch data: " + textStatus);
-                    }
-                });
-            });
-
-      
-  
-});
-
-
-    </script>
-
-    <script>
-    $(document).ready(function() {
-        $('#generate-btn').click(function() {
-            fetch('/generate', {
-                method: 'POST'
-            })
-            .then(response => {
-                if (response.ok) {
-                    $('#output').attr('src', 'data:image/png;base64,' + response.image_data);
-                    $('#output').show();
-                    
-                    return response.blob(); // Convert the response to a Blob
-                } else {
-                    throw new Error('Failed to generate the file');
-                }
-            })
-            .then(blob => {
-                // Create a temporary URL for the file
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'chart.png';  // Set the file name for download
-                document.body.appendChild(a); // Append <a> to body
-                
-                a.click(); // Trigger the download
-                a.remove(); // Remove <a> after download
-                window.URL.revokeObjectURL(url); // Clean up the URL object
-            })
-            .catch(error => {
-                alert("Error: " + error.message);
-            });
-        });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'gantt_chart.png';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+          });
+        } else {
+          alert('Unexpected response from server.');
+        }
+      },
+      error: function (jqXHR, textStatus, errorThrown) {
+        $('#hourglass').hide();
+        alert('Failed to fetch data: ' + (errorThrown || textStatus));
+      }
     });
+  });
+});
 </script>
+
 </div>
 </body>
 </html>

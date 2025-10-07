@@ -15,10 +15,12 @@ class JiraAPI:
     """Class to interact with JIRA API."""
 
     def __init__(self, label, assignee, level):
+        print(assignee)
         self.label = label
         self.assignee = assignee
         self.level = level
-        self.url = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'%20AND%20type='Initiative'%20AND%20labels={label}%20AND%20assignee%20IN%20%28%22{assignee}%22%29"
+        self.assignee
+        self.url = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'%20AND%20type='Initiative'%20AND%20labels={self.label}%20AND%20assignee%20IN%20%28%22{self.assignee}%22%29"
         self.JIRA_URL = f"https://tuftswork.atlassian.net/rest/api/3/search?jql=project='LGP'"
         self.BEARER_ACCESS_TOKEN = os.environ.get("BEARER_ACCESS_TOKEN")
         self.headers = {
@@ -38,7 +40,7 @@ class JiraAPI:
         end = "&maxResults=100"
 
         # Retrieve the environment variable and set it to the variable `bearer_access_token`
-        bearer_access_token = BEARER_ACCESS_TOKEN
+        bearer_access_token = self.BEARER_ACCESS_TOKEN
 
         # Check if the environment variable is missing
         if not bearer_access_token:
@@ -56,7 +58,7 @@ class JiraAPI:
         if response.status_code in [200, 201, 202, 203, 204]:
             try:
                 issues = response.json()["issues"]
-            except (KeyError, json.JSONDecodeError) as e:
+            except (KeyError, issues.JSONDecodeError) as e:
                 return jsonify({"message": "Error parsing JIRA response"}), 500
             # Create DataFrame with additional column for Assignee
             df = pd.DataFrame(
@@ -71,6 +73,9 @@ class JiraAPI:
                 ]
             )
             issues = response.json()["issues"]
+            print(issues)
+
+            print(response.json())
             rows = []
 
             for issue in issues:
@@ -123,7 +128,7 @@ class JiraAPI:
                     # child_query = f'parent={key}'
 
                     child_response = requests.get(
-                        f"{JIRA_URL}%20AND%20{child_query}&maxResults=100",
+                        f"{self.JIRA_URL}%20AND%20{child_query}&maxResults=100",
                         headers=headers,
                     ).json()
 
@@ -193,7 +198,7 @@ class JiraAPI:
                     rows.append(
                         [title, level_of_effort, start_date, due_date, assignee, status, ""]
                     )
-
+            print(rows)
             # Create DataFrame
             df = pd.DataFrame(
                 rows,
@@ -208,10 +213,11 @@ class JiraAPI:
                 ],
             )
 
+            print(df)
             # print(df)
-            return jsonify({"status": "success", "data": df.to_dict(orient="index")})
+            return {"status": "success", "data": df.to_dict(orient="index")}
 
         else:
-            return jsonify({"message": "JIRA lookup failure.  Check label exists"}), 400
+            return {"message": "JIRA lookup failure.  Check label exists"}
         
 

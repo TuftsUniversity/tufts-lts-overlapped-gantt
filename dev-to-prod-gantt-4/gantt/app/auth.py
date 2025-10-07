@@ -18,11 +18,11 @@ PASSWORD = credentials["password"]
 @auth.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-    def login(self):
-        """Handle user login."""
-    def login(self):
-        """Handle user login."""
-    def login(self):
+    # def login(self):
+    #     """Handle user login."""
+    # def login(self):
+    #     """Handle user login."""
+    # def login(self):
         """Handle user login."""
         username = request.form.get("username")
         password = request.form.get("password")
@@ -34,14 +34,10 @@ def login():
             flash("Invalid username or password", "error")
             return redirect(url_for("auth.login"))
 
-    return render_template("login.html")
+        return render_template("login.html")
 
 
 @auth.route("/logout")
-    def logout(self):
-        """Handle user logout."""
-    def logout(self):
-        """Handle user logout."""
 def logout():
     session.pop("user", None)
     return redirect(url_for("auth.login"))
@@ -49,17 +45,11 @@ def logout():
 
 def login_required(f):
     """Decorator to protect routes that require login."""
-    """Decorator to protect routes that require login."""
-    """Decorator to protect routes that require login."""
 
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if "user" not in session:
-            return redirect(
-                url_for("auth.login")
-            )  # Redirect to the login page if not logged in
+            return redirect(url_for("auth.login"))  # Redirect to the login page if not logged in
         return f(*args, **kwargs)
-    def logout(self):
-        """Handle user logout."""
 
     return decorated_function

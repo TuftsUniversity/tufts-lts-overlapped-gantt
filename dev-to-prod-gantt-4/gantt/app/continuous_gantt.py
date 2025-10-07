@@ -11,6 +11,7 @@ import logging
 import textwrap
 import json
 import matplotlib.patches as mpatches
+from flask import send_file
 
 from flask import Flask, request, jsonify, current_app
 
@@ -32,11 +33,14 @@ class ContinuousGantt:
 
     def generate(self):
         jira_json = self.jira_data
+
+        projects_df = pd.DataFrame.from_dict(jira_json["data"], orient="index")
+        print(projects_df)
         # print(projects_df)
         # projects_df = jira_json.copy(0)
         # projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("float")
         # projects_df['level_of_effort'] = projects_df['level_of_effort'].astype("Int64")
-        projects_df = jira_json.copy()
+
         projects_df = projects_df.reset_index()
         if projects_df.loc[0, "Parent Project"] != "":
             projects_df["level_of_effort"] = 1
@@ -224,11 +228,11 @@ class ContinuousGantt:
             )
 
             parent_legend_handles = [
-                mpatches.Patch(color=color, label=wrap_text(parent, width=25))
+                mpatches.Patch(color=color, label=self.wrap_text(parent, width=25))
                 for parent, color in parent_color_map.items()
             ]
             parent_legend_handles = [
-                mpatches.Patch(color=color, label=wrap_text(parent, width=25))
+                mpatches.Patch(color=color, label=self.wrap_text(parent, width=25))
                 for parent, color in parent_color_map.items()
             ]
             legend2 = gnt.legend(
@@ -242,7 +246,7 @@ class ContinuousGantt:
 
             # Title-number legend
             title_legend_handles = [
-                mpatches.Patch(color="white", label=f"{num}: {wrap_text(title, width=40)}")
+                mpatches.Patch(color="white", label=f"{num}: {self.wrap_text(title, width=40)}")
                 for title, num in title_number_map.items()
             ]
             legend1 = gnt.legend(
@@ -320,7 +324,7 @@ class ContinuousGantt:
                     edgecolor=edgecolor,
                     hatch=hatch,
                     linewidth=3,
-                    label=wrap_text(df.loc[l, "Title"]),
+                    label=self.wrap_text(df.loc[l, "Title"]),
                 )
                 # gnt.broken_barh(
                 #     [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
@@ -338,7 +342,7 @@ class ContinuousGantt:
                         x=x1 + x2 / 2,
                         y=(int(df.loc[l, "stack"]) + int(df.loc[l, "level_of_effort"]))
                         - int(df.loc[l, "level_of_effort"]) / 2,
-                        s=wrap_text(df.loc[l, "Title"]),
+                        s=self.wrap_text(df.loc[l, "Title"]),
                         ha="center",
                         va="center",
                         color="blue",
@@ -362,9 +366,10 @@ class ContinuousGantt:
             plt.savefig(img, format="png", dpi=100)
 
             img.seek(0)
-
-            # (img, flush=True)
+           
             return img
+            # (img, flush=True)
+            # return img
         # plot_url = base64.b64encode(img.getvalue()).decode("utf8")
 
         # Use send_file to return the image for download
