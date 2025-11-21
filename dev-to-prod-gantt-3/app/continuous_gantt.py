@@ -14,6 +14,10 @@ import matplotlib.patches as mpatches
 
 from flask import Flask, request, jsonify, current_app
 
+def truncate_text(text, max_len=25):
+    if len(text) <= max_len:
+        return text
+    return text[:max_len - 3] + "..."
 
 def wrap_text(text, width=20):
     """Wraps the text to a specified width."""
