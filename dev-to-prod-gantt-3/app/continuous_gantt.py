@@ -179,7 +179,8 @@ def generate_gantt_chart(jira_json):
                 [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
                 [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
                 color=color_value, edgecolor = edgecolor, hatch = hatch, linewidth=3,
-                label=wrap_text(df.loc[l, "Title"]),
+                label=truncate_text(df.loc[l, "Title"]),
+
             )
             # gnt.broken_barh(
             #     [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
@@ -209,10 +210,10 @@ def generate_gantt_chart(jira_json):
         gnt.set_xlabel("Date")
         gnt.set_ylabel("Rough Average Hours per Day\nEffort Level: Low=2, Medium=4, High= 6, Average for Project.  Most projects of any length are Low=2")
 
-        parent_legend_handles = [    mpatches.Patch(color=color, label=wrap_text(parent, width=25))
+        parent_legend_handles = [    mpatches.Patch(color=color, label=truncate_text(df.loc[l, "Title"]))
                 for parent, color in parent_color_map.items()
             ]
-        parent_legend_handles = [    mpatches.Patch(color=color, label=wrap_text(parent, width=25))
+        parent_legend_handles = [    mpatches.Patch(color=color, label=truncate_text(df.loc[l, "Title"]),)
             for parent, color in parent_color_map.items()
         ]
         legend2 = gnt.legend(
@@ -226,7 +227,10 @@ def generate_gantt_chart(jira_json):
         
         # Title-number legend
         title_legend_handles = [
-            mpatches.Patch(color="white", label=f"{num}: {wrap_text(title, width=40)}")
+            mpatches.Patch(
+    color="white",
+    label=f"{num}: {truncate_text(df.loc[l, 'Title'])}")
+
             for title, num in title_number_map.items()
         ]
         legend1 = gnt.legend(
@@ -299,7 +303,7 @@ def generate_gantt_chart(jira_json):
                 [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
                 [int(df.loc[l, "stack"]), int(df.loc[l, "level_of_effort"])],
                 color=color_value, edgecolor = edgecolor, hatch = hatch, linewidth=3,
-                label=wrap_text(df.loc[l, "Title"]),
+                label=truncate_text(df.loc[l, "Title"]),
             )
             # gnt.broken_barh(
             #     [(pd.to_datetime(start), pd.to_datetime(finish) - pd.to_datetime(start))],
@@ -315,7 +319,7 @@ def generate_gantt_chart(jira_json):
                     x=x1 + x2 / 2,
                     y=(int(df.loc[l, "stack"]) + int(df.loc[l, "level_of_effort"]))
                     - int(df.loc[l, "level_of_effort"]) / 2,
-                    s=wrap_text(df.loc[l, "Title"]),
+                    s=truncate_text(df.loc[l, "Title"]),
                     ha="center",
                     va="center",
                     color="blue",
